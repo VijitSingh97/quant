@@ -51,6 +51,7 @@ A `Makefile` wraps the common commands: `make dashboard`, `make monitor`,
 | `btcvol.dashboard` / `btcvol-dashboard` | One-shot snapshot: spot, realized vol, DVOL implied vol, futures-basis term structure, perp funding/OI — plus an interpreted **suggested direction**. Saves a JSON snapshot to `data/`. |
 | `btcvol.backtests.carry` / `btcvol-carry [years]` | Backtests long-spot/short-perp funding carry on multi-year Deribit hourly funding. APR, Sharpe, drawdown, % negative, yearly breakdown. |
 | `btcvol.backtests.vrp` / `btcvol-vrp` | Backtests selling 30d vol (DVOL vs forward realized). Win rate, avg premium, worst tail roll, Sharpe. |
+| `btcvol.structures` / `btcvol-structures` | Builds **defined-risk** short-vol structures (iron condor, put/call credit spreads) from the live Deribit chain. Prices legs conservatively (sell at bid, buy wings at ask) and reports max loss, breakevens, probability of profit (BS under implied), expected value under realized, and an ASCII payoff diagram. Flags: `--dte`, `--delta`, `--wing`. |
 | `btcvol.monitor` / `btcvol-monitor` | Live perp funding across 4 venues, normalized to APR, plus the cross-venue spread / arb flag. |
 | `btcvol.logger` / `btcvol-log` | Appends one compact metrics row to `data/timeseries.csv`. The launchd target. |
 
@@ -61,6 +62,7 @@ make dashboard      # what's the regime + which engine is favored right now?
 make monitor        # where is funding richest, and is there a cross-venue arb?
 make carry YEARS=2  # has carry actually paid over 2 years?
 make vrp            # is the implied-vs-realized premium harvestable?
+make structures     # turn the VRP edge into a concrete capped-loss trade
 ```
 
 ---
@@ -76,6 +78,7 @@ quant/
 │   ├── __init__.py
 │   ├── dashboard.py          market snapshot + interpretation
 │   ├── monitor.py            cross-venue funding monitor
+│   ├── structures.py         defined-risk option structures vs live chain
 │   ├── logger.py             compact CSV time-series logger (launchd target)
 │   ├── backtests/
 │   │   ├── carry.py          funding-carry backtest
@@ -83,8 +86,9 @@ quant/
 │   └── core/                 shared layer (no presentation)
 │       ├── http.py           keyless REST helpers
 │       ├── stats.py          vol math: cc/parkinson vol, sharpe, drawdown
+│       ├── blackscholes.py   BS pricing, delta, lognormal probabilities / EV
 │       ├── format.py         fmt_pct / fmt_vol / sparkline
-│       ├── sources.py        all exchange data pulls
+│       ├── sources.py        all exchange data pulls (incl. option chain)
 │       └── paths.py          project-root-anchored data dir
 ├── scripts/
 │   ├── run_logger.sh         what launchd actually executes
@@ -167,7 +171,8 @@ size, and **sell defined-risk (spreads/condors), never naked**.
 
 ## Roadmap
 
-- Defined-risk option spread / iron-condor P&L modeler against the live Deribit chain
-- Vol-surface & skew reader (sell the right strikes, not just ATM)
+- ~~Defined-risk option spread / iron-condor modeler against the live Deribit chain~~ — done (`btcvol.structures`)
+- Vol-surface & skew reader (sell the right strikes across the whole surface, not just ~20Δ)
+- Backtest the structure-selling rule historically (roll condors on DVOL>RV, measure tail)
 - Backtest on our own `timeseries.csv` once it has history
 - Delta-neutral book monitor (alert when net delta drifts)

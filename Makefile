@@ -1,6 +1,6 @@
 PY := PYTHONPATH=src python3
 
-.PHONY: help install dev test dashboard monitor carry vrp log launchd-install launchd-uninstall clean
+.PHONY: help install dev test dashboard monitor carry vrp structures log launchd-install launchd-uninstall clean
 
 help:
 	@echo "make install            editable install (pip install -e .)"
@@ -10,6 +10,7 @@ help:
 	@echo "make monitor            cross-venue funding monitor"
 	@echo "make carry [YEARS=2]    funding-carry backtest"
 	@echo "make vrp                vol-risk-premium backtest"
+	@echo "make structures         defined-risk option structures vs live chain"
 	@echo "make log                append one row to data/timeseries.csv"
 	@echo "make launchd-install    install the hourly logger launchd agent"
 	@echo "make launchd-uninstall  remove the launchd agent"
@@ -34,6 +35,9 @@ carry:
 
 vrp:
 	$(PY) -m btcvol.backtests.vrp
+
+structures:
+	$(PY) -m btcvol.structures
 
 log:
 	$(PY) -m btcvol.logger

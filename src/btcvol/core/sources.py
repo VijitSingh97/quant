@@ -82,6 +82,39 @@ def deribit_dvol(days=400, resolution="1D"):
     return [(row[0], row[4] / 100.0) for row in data]   # close, % -> fraction
 
 
+def deribit_option_chain():
+    """Live BTC option chain -> {'index', 'options': [...]}.
+
+    Strikes/expiries/types come from get_instruments (robust, no name parsing);
+    mark IV and bid/ask/mark prices (quoted in BTC) come from the book summary.
+    One call each — greeks/probabilities are computed locally from IV.
+    """
+    base = "https://www.deribit.com/api/v2/public"
+    instruments = http_get(f"{base}/get_instruments?currency=BTC&kind=option&expired=false")["result"]
+    summary = http_get(f"{base}/get_book_summary_by_currency?currency=BTC&kind=option")["result"]
+    sm = {s["instrument_name"]: s for s in summary}
+    index = http_get(f"{base}/get_index_price?index_name=btc_usd")["result"]["index_price"]
+    now = int(time.time() * 1000)
+
+    opts = []
+    for ins in instruments:
+        s = sm.get(ins["instrument_name"])
+        if not s or s.get("mark_iv") is None:
+            continue
+        opts.append({
+            "instrument": ins["instrument_name"],
+            "expiry_ms": ins["expiration_timestamp"],
+            "dte": (ins["expiration_timestamp"] - now) / (1000 * 86400),
+            "strike": float(ins["strike"]),
+            "type": "C" if ins["option_type"] == "call" else "P",
+            "iv": s["mark_iv"] / 100.0,          # % -> fraction
+            "mark_btc": s.get("mark_price"),
+            "bid_btc": s.get("bid_price"),
+            "ask_btc": s.get("ask_price"),
+        })
+    return {"index": index, "options": opts}
+
+
 # --------------------------------------------------------------------------- #
 # Live snapshots (for dashboard / logger)
 # --------------------------------------------------------------------------- #
