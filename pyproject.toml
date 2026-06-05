@@ -23,6 +23,7 @@ btcvol-carry      = "btcvol.backtests.carry:main"
 btcvol-vrp        = "btcvol.backtests.vrp:main"
 btcvol-condor-bt  = "btcvol.backtests.structures:main"
 btcvol-structures = "btcvol.structures:main"
+btcvol-skew       = "btcvol.skew:main"
 btcvol-log        = "btcvol.logger:main"
 
 [tool.setuptools.packages.find]

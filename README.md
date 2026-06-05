@@ -53,6 +53,7 @@ A `Makefile` wraps the common commands: `make dashboard`, `make monitor`,
 | `btcvol.backtests.vrp` / `btcvol-vrp` | Backtests selling 30d vol *naked* (DVOL vs forward realized). Win rate, avg premium, worst tail roll, Sharpe. |
 | `btcvol.backtests.structures` / `btcvol-condor-bt` | Backtests the **monthly defined-risk condor rule**: rolls a delta-based iron condor (synthetic credit @ historical DVOL, real price path for the payoff), compares sell-every-month vs a DVOL>RV filter, and shows the capped tail vs the naked book. Flags: `--delta`, `--wing-pct`, `--risk`. |
 | `btcvol.structures` / `btcvol-structures` | Builds **defined-risk** short-vol structures (iron condor, put/call credit spreads) from the live Deribit chain. Prices legs conservatively (sell at bid, buy wings at ask) and reports max loss, breakevens, probability of profit (BS under implied), expected value under realized, and an ASCII payoff diagram. Flags: `--dte`, `--delta`, `--wing`. |
+| `btcvol.skew` / `btcvol-skew` | Reads the live implied-vol **surface**: per-expiry ATM/25Δ vols, risk-reversal (RR25) and butterfly (BF25), the ATM term structure (contango/backwardation), an ASCII smile, and a fitted parametric skew shape that the condor backtest reuses. |
 | `btcvol.monitor` / `btcvol-monitor` | Live perp funding across 4 venues, normalized to APR, plus the cross-venue spread / arb flag. |
 | `btcvol.logger` / `btcvol-log` | Appends one compact metrics row to `data/timeseries.csv`. The launchd target. |
 
@@ -64,6 +65,8 @@ make monitor        # where is funding richest, and is there a cross-venue arb?
 make carry YEARS=2  # has carry actually paid over 2 years?
 make vrp            # is the implied-vs-realized premium harvestable?
 make structures     # turn the VRP edge into a concrete capped-loss trade
+make skew           # read the live vol surface / skew
+make condor-bt      # backtest the monthly condor rule (add --skew for real skew)
 ```
 
 ---
@@ -80,15 +83,17 @@ quant/
 │   ├── dashboard.py          market snapshot + interpretation
 │   ├── monitor.py            cross-venue funding monitor
 │   ├── structures.py         defined-risk option structures vs live chain
+│   ├── skew.py               live implied-vol surface / skew reader
 │   ├── logger.py             compact CSV time-series logger (launchd target)
 │   ├── backtests/
 │   │   ├── carry.py          funding-carry backtest
 │   │   ├── vrp.py            volatility-risk-premium backtest (naked)
-│   │   └── structures.py     monthly defined-risk condor-rule backtest
+│   │   └── structures.py     monthly condor-rule backtest (flat or --skew)
 │   └── core/                 shared layer (no presentation)
 │       ├── http.py           keyless REST helpers
 │       ├── stats.py          vol math: cc/parkinson vol, sharpe, drawdown
-│       ├── blackscholes.py   BS pricing, delta, lognormal probabilities / EV
+│       ├── blackscholes.py   BS pricing, delta, strike-from-delta, prob/EV
+│       ├── surface.py        IV surface: smile metrics, interpolation, skew fit
 │       ├── format.py         fmt_pct / fmt_vol / sparkline
 │       ├── sources.py        all exchange data pulls (incl. option chain)
 │       └── paths.py          project-root-anchored data dir
@@ -166,13 +171,17 @@ offline — no network calls.
   **won 77% of rolls** (~+4.2 vol pts avg, Sharpe ~1.0) — but the **worst roll lost
   -28.8 vol pts** (Jan 2026, realized 67% vs implied 39%). One tail erases many wins.
 - **Condor rule** (~1y, 13 rolls): the defined-risk version won **85%** of months;
-  the two losing months lost a **bounded** max instead of the naked tail. A DVOL>RV
-  filter lifted Sharpe 0.74→0.92 and cut max drawdown −26%→−20%. Sample is small
-  (one year) — directional, not conclusive.
+  the two losing months lost a **bounded** max instead of the naked tail.
+  - *Flat-vol* pricing looked great (CAGR +21%, Sharpe 0.74) — but it **overstates**
+    the credit. Adding **real skew** (`--skew`) cuts avg credit ~17% and the edge
+    with it: unconditional drops to CAGR +5% / Sharpe 0.32, because in a put-skewed
+    market the long wing you *buy* is richer than the short you *sell*.
+  - The **DVOL>RV filter** is what keeps it viable under skew: CAGR ~+11%, Sharpe
+    0.55, maxDD −20% (vs −28% unconditional). Sample is small — directional, not conclusive.
 
-**Takeaway:** both edges are real but tail-driven. Combine them, vol-target your
-size, and **sell defined-risk (spreads/condors), never naked** — the condor backtest
-shows the cap turning a catastrophic month into a survivable one.
+**Takeaway:** both edges are real but tail-driven, and **skew makes defined-risk
+selling less generous than flat-vol intuition suggests**. Combine the engines,
+vol-target your size, sell **defined-risk and filtered (DVOL>RV)**, never naked.
 
 ---
 
@@ -180,6 +189,7 @@ shows the cap turning a catastrophic month into a survivable one.
 
 - ~~Defined-risk option spread / iron-condor modeler against the live Deribit chain~~ — done (`btcvol.structures`)
 - ~~Backtest the condor-selling rule historically (roll on DVOL>RV, measure the tail)~~ — done (`btcvol.backtests.structures`)
-- Vol-surface & skew reader (sell the right strikes across the whole surface, not just ~20Δ); would also let the condor backtest price legs with real skew instead of flat vol
+- ~~Vol-surface & skew reader~~ — done (`btcvol.skew`); also feeds `--skew` into the condor backtest (which revealed flat-vol was over-optimistic)
+- Historical skew (not just today's shape) — needs a stored surface; the launchd logger could capture 25Δ RR/BF over time
 - Backtest on our own `timeseries.csv` once it has history
 - Delta-neutral book monitor (alert when net delta drifts)

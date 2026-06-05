@@ -34,14 +34,19 @@ def _round(x, grid):
     return round(x / grid) * grid
 
 
-def _condor(S, iv, T, delta, wing_pct, grid):
-    """Build a delta-based condor; return strikes, credit, wing, max_loss (per 1 BTC, USD)."""
+def _condor(S, iv, T, delta, wing_pct, grid, iv_fn=None):
+    """Build a delta-based condor; return strikes, credit, wing, max_loss (per 1 BTC, USD).
+
+    Strikes are picked at the ATM iv (consistent across modes); legs are PRICED at
+    iv_fn(iv, T, K, S) when given (real skew), else flat at the ATM iv.
+    """
+    leg_iv = (lambda K: iv_fn(iv, T, K, S)) if iv_fn else (lambda K: iv)
     kp_s = _round(strike_for_delta(S, T, iv, -delta, "P"), grid)
     kc_s = _round(strike_for_delta(S, T, iv, +delta, "C"), grid)
     wing = max(grid, _round(wing_pct * S, grid))
     kp_l, kc_l = kp_s - wing, kc_s + wing
-    credit = (bs_price(S, kp_s, T, iv, "P") - bs_price(S, kp_l, T, iv, "P")
-              + bs_price(S, kc_s, T, iv, "C") - bs_price(S, kc_l, T, iv, "C"))
+    credit = (bs_price(S, kp_s, T, leg_iv(kp_s), "P") - bs_price(S, kp_l, T, leg_iv(kp_l), "P")
+              + bs_price(S, kc_s, T, leg_iv(kc_s), "C") - bs_price(S, kc_l, T, leg_iv(kc_l), "C"))
     return {"kp_s": kp_s, "kp_l": kp_l, "kc_s": kc_s, "kc_l": kc_l,
             "wing": wing, "credit": credit, "max_loss": wing - credit}
 
@@ -89,7 +94,18 @@ def _print_summary(s, risk):
     print(f"  equity curve     {sparkline(s['equity'])}")
 
 
-def run(delta=0.20, wing_pct=0.08, risk=0.20, grid=1000.0):
+def run(delta=0.20, wing_pct=0.08, risk=0.20, grid=1000.0, skew=False):
+    # Optional: apply today's fitted skew shape to historical ATM DVOL (vs flat vol).
+    iv_fn, skew_note = None, "flat vol"
+    if skew:
+        from ..core.surface import build_surface, fit_skew, skew_iv
+        from ..core.sources import deribit_option_chain
+        surf = build_surface(deribit_option_chain())
+        fit = fit_skew(surf)
+        coeffs = fit["coeffs"]
+        iv_fn = lambda atm, T, K, S: skew_iv(coeffs, atm, T, K, S)
+        skew_note = f"skew from live {fit['ref_expiry']} surface (a={tuple(round(c,3) for c in coeffs)})"
+
     dvol = deribit_dvol(days=400, resolution="1D")
     chart = deribit_chart("BTC-PERPETUAL", days=400, resolution="1D")
     ticks, closes = chart["ticks"], chart["close"]
@@ -108,11 +124,13 @@ def run(delta=0.20, wing_pct=0.08, risk=0.20, grid=1000.0):
         st0, iv0, d0 = S[i], IV[i], dates[i]
         rv_trail = cc_vol(S[: i + 1], 30) if i >= 31 else None
         rv_fwd = cc_vol(S[i: i + HOLD + 1], HOLD)
-        c = _condor(st0, iv0, T, delta, wing_pct, grid)
+        c = _condor(st0, iv0, T, delta, wing_pct, grid, iv_fn)
+        credit_flat = _condor(st0, iv0, T, delta, wing_pct, grid)["credit"] if skew else c["credit"]
         pnl = _expiry_pnl(c, S[i + HOLD])
         ror = pnl / c["max_loss"] if c["max_loss"] > 0 else 0.0
         row = {"date": d0, "iv": iv0, "rv_trail": rv_trail, "rv_fwd": rv_fwd,
-               "credit": c["credit"], "max_loss": c["max_loss"], "pnl": pnl, "ror": ror}
+               "credit": c["credit"], "credit_flat": credit_flat,
+               "max_loss": c["max_loss"], "pnl": pnl, "ror": ror}
         detail.append(row)
 
         always.append({**row, "active": True})
@@ -125,7 +143,12 @@ def run(delta=0.20, wing_pct=0.08, risk=0.20, grid=1000.0):
     print(f"\n{bar}\nCONDOR-SELLING RULE BACKTEST  (roll 30d iron condor, ~{delta:.0%} short Δ, "
           f"{wing_pct:.0%} wings)\n{bar}")
     print(f"Window {dates[0]} -> {dates[-1]}   {len(detail)} non-overlapping rolls   "
-          f"synthetic credit @ historical DVOL (flat vol)")
+          f"synthetic credit @ historical DVOL ({skew_note})")
+    if skew:
+        avg_skew = statistics.mean(r["credit"] for r in detail)
+        avg_flat = statistics.mean(r["credit_flat"] for r in detail)
+        print(f"Skew vs flat: avg credit ${avg_flat:,.0f} -> ${avg_skew:,.0f} "
+              f"({fmt_pct(avg_skew/avg_flat - 1)} from put-richness)")
 
     # per-roll table (small N -> show them all)
     print(f"\n{'roll date':11} {'IV':>6} {'RV_fwd':>7} {'credit$':>8} {'maxloss$':>9} "
@@ -153,8 +176,14 @@ def run(delta=0.20, wing_pct=0.08, risk=0.20, grid=1000.0):
     print(f"  (many small wins, rare capped losses) is the structural signature of selling vol with wings.")
     print(f"• Compounding shown at {int(risk*100)}% of capital risked per roll; scale that lever to taste,")
     print(f"  but one capped max-loss should stay a small, survivable fraction of the account.")
-    print("\n(Educational tooling, not investment advice. Flat-vol synthetic credit ignores skew;")
-    print(" real condors collect a bit more on the put wing. Execution/fees not modeled.)")
+    if skew:
+        print("• Skew-aware credit is LOWER than flat: put-skew makes the long wing you BUY richer than")
+        print("  the short you sell, so the spread collects less. The realistic edge is the modest one above.")
+    else:
+        print("• This run prices flat-vol, which OVERSTATES the credit (it ignores that the long put wing")
+        print("  is richer under skew). Run with --skew for the lower, more realistic estimate.")
+    print("\n(Educational tooling, not investment advice. Synthetic credit; --skew applies today's")
+    print(" fitted shape to historical ATM vol (static-skew approx). Execution/fees not modeled.)")
 
 
 def main():
@@ -162,8 +191,9 @@ def main():
     ap.add_argument("--delta", type=float, default=0.20, help="short-strike target |delta| (default 0.20)")
     ap.add_argument("--wing-pct", type=float, default=0.08, help="wing width as fraction of spot (default 0.08)")
     ap.add_argument("--risk", type=float, default=0.20, help="capital fraction risked per roll for the compounding curve (default 0.20)")
+    ap.add_argument("--skew", action="store_true", help="price legs with today's fitted skew shape (vs flat vol)")
     args = ap.parse_args()
-    run(delta=args.delta, wing_pct=args.wing_pct, risk=args.risk)
+    run(delta=args.delta, wing_pct=args.wing_pct, risk=args.risk, skew=args.skew)
 
 
 if __name__ == "__main__":
