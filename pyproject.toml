@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "btcvol"
+version = "0.1.0"
+description = "BTC volatility & funding-carry research toolkit (stdlib-only)"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "vijit" }]
+keywords = ["bitcoin", "volatility", "funding", "carry", "quant", "backtest"]
+dependencies = []   # intentionally stdlib-only
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.scripts]
+btcvol-dashboard = "btcvol.dashboard:main"
+btcvol-monitor   = "btcvol.monitor:main"
+btcvol-carry     = "btcvol.backtests.carry:main"
+btcvol-vrp       = "btcvol.backtests.vrp:main"
+btcvol-log       = "btcvol.logger:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
