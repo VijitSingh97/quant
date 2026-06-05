@@ -55,3 +55,16 @@ def test_expected_payoff_long_call_ge_intrinsic():
     K = 70000
     ev = bs.expected_payoff(lambda st: max(0.0, st - K), 60000, 0.2, 0.6)
     assert ev > 0
+
+
+def test_strike_for_delta_roundtrips():
+    S, T, sig = 60000, 30 / 365, 0.55
+    for target, kind in [(0.20, "C"), (0.30, "C"), (-0.20, "P"), (-0.10, "P")]:
+        K = bs.strike_for_delta(S, T, sig, target, kind)
+        assert abs(bs.bs_delta(S, K, T, sig, kind) - target) < 1e-3
+
+
+def test_strike_for_delta_otm_side():
+    S, T, sig = 60000, 30 / 365, 0.55
+    assert bs.strike_for_delta(S, T, sig, 0.20, "C") > S      # OTM call above spot
+    assert bs.strike_for_delta(S, T, sig, -0.20, "P") < S     # OTM put below spot

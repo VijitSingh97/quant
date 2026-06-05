@@ -50,7 +50,8 @@ A `Makefile` wraps the common commands: `make dashboard`, `make monitor`,
 |---|---|
 | `btcvol.dashboard` / `btcvol-dashboard` | One-shot snapshot: spot, realized vol, DVOL implied vol, futures-basis term structure, perp funding/OI — plus an interpreted **suggested direction**. Saves a JSON snapshot to `data/`. |
 | `btcvol.backtests.carry` / `btcvol-carry [years]` | Backtests long-spot/short-perp funding carry on multi-year Deribit hourly funding. APR, Sharpe, drawdown, % negative, yearly breakdown. |
-| `btcvol.backtests.vrp` / `btcvol-vrp` | Backtests selling 30d vol (DVOL vs forward realized). Win rate, avg premium, worst tail roll, Sharpe. |
+| `btcvol.backtests.vrp` / `btcvol-vrp` | Backtests selling 30d vol *naked* (DVOL vs forward realized). Win rate, avg premium, worst tail roll, Sharpe. |
+| `btcvol.backtests.structures` / `btcvol-condor-bt` | Backtests the **monthly defined-risk condor rule**: rolls a delta-based iron condor (synthetic credit @ historical DVOL, real price path for the payoff), compares sell-every-month vs a DVOL>RV filter, and shows the capped tail vs the naked book. Flags: `--delta`, `--wing-pct`, `--risk`. |
 | `btcvol.structures` / `btcvol-structures` | Builds **defined-risk** short-vol structures (iron condor, put/call credit spreads) from the live Deribit chain. Prices legs conservatively (sell at bid, buy wings at ask) and reports max loss, breakevens, probability of profit (BS under implied), expected value under realized, and an ASCII payoff diagram. Flags: `--dte`, `--delta`, `--wing`. |
 | `btcvol.monitor` / `btcvol-monitor` | Live perp funding across 4 venues, normalized to APR, plus the cross-venue spread / arb flag. |
 | `btcvol.logger` / `btcvol-log` | Appends one compact metrics row to `data/timeseries.csv`. The launchd target. |
@@ -82,7 +83,8 @@ quant/
 │   ├── logger.py             compact CSV time-series logger (launchd target)
 │   ├── backtests/
 │   │   ├── carry.py          funding-carry backtest
-│   │   └── vrp.py            volatility-risk-premium backtest
+│   │   ├── vrp.py            volatility-risk-premium backtest (naked)
+│   │   └── structures.py     monthly defined-risk condor-rule backtest
 │   └── core/                 shared layer (no presentation)
 │       ├── http.py           keyless REST helpers
 │       ├── stats.py          vol math: cc/parkinson vol, sharpe, drawdown
@@ -163,16 +165,21 @@ offline — no network calls.
 - **Vol-risk-premium** (~1y): implied > realized **72% of days**; selling 30d vol
   **won 77% of rolls** (~+4.2 vol pts avg, Sharpe ~1.0) — but the **worst roll lost
   -28.8 vol pts** (Jan 2026, realized 67% vs implied 39%). One tail erases many wins.
+- **Condor rule** (~1y, 13 rolls): the defined-risk version won **85%** of months;
+  the two losing months lost a **bounded** max instead of the naked tail. A DVOL>RV
+  filter lifted Sharpe 0.74→0.92 and cut max drawdown −26%→−20%. Sample is small
+  (one year) — directional, not conclusive.
 
 **Takeaway:** both edges are real but tail-driven. Combine them, vol-target your
-size, and **sell defined-risk (spreads/condors), never naked**.
+size, and **sell defined-risk (spreads/condors), never naked** — the condor backtest
+shows the cap turning a catastrophic month into a survivable one.
 
 ---
 
 ## Roadmap
 
 - ~~Defined-risk option spread / iron-condor modeler against the live Deribit chain~~ — done (`btcvol.structures`)
-- Vol-surface & skew reader (sell the right strikes across the whole surface, not just ~20Δ)
-- Backtest the structure-selling rule historically (roll condors on DVOL>RV, measure tail)
+- ~~Backtest the condor-selling rule historically (roll on DVOL>RV, measure the tail)~~ — done (`btcvol.backtests.structures`)
+- Vol-surface & skew reader (sell the right strikes across the whole surface, not just ~20Δ); would also let the condor backtest price legs with real skew instead of flat vol
 - Backtest on our own `timeseries.csv` once it has history
 - Delta-neutral book monitor (alert when net delta drifts)

@@ -40,6 +40,23 @@ def bs_delta(S, K, T, sigma, kind):
     return norm_cdf(d1) if kind == "C" else norm_cdf(d1) - 1.0
 
 
+def strike_for_delta(S, T, sigma, target, kind, lo_mult=0.2, hi_mult=3.0, iters=64):
+    """Invert BS delta -> the strike with delta == target.
+
+    Both call delta (N(d1)) and put delta (N(d1)-1) are monotonically decreasing
+    in K, so a plain bisection converges. `target` is signed: e.g. +0.20 for a
+    call, -0.20 for a put.
+    """
+    lo, hi = S * lo_mult, S * hi_mult
+    for _ in range(iters):
+        mid = 0.5 * (lo + hi)
+        if bs_delta(S, mid, T, sigma, kind) > target:
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
+
+
 def prob_st_below(S, x, T, sigma):
     """Risk-neutral P(S_T <= x) under the r=0 lognormal."""
     if T <= 0 or sigma <= 0:

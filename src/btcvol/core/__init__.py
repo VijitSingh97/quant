@@ -5,7 +5,7 @@ from .stats import (DAYS, OKX_FUNDINGS_PER_DAY, HL_FUNDINGS_PER_DAY, DERIBIT_FUN
                     log_returns, ann_vol, cc_vol, parkinson_vol, max_drawdown, sharpe)
 from .format import fmt_pct, fmt_vol, sparkline
 from .paths import PROJECT_ROOT, DATA_DIR
-from .blackscholes import (norm_cdf, bs_price, bs_delta,
+from .blackscholes import (norm_cdf, bs_price, bs_delta, strike_for_delta,
                            prob_between, lognormal_pdf, expected_payoff)
 from . import sources
 
@@ -14,6 +14,7 @@ __all__ = [
     "DAYS", "OKX_FUNDINGS_PER_DAY", "HL_FUNDINGS_PER_DAY", "DERIBIT_FUNDINGS_PER_DAY",
     "log_returns", "ann_vol", "cc_vol", "parkinson_vol", "max_drawdown", "sharpe",
     "fmt_pct", "fmt_vol", "sparkline",
-    "norm_cdf", "bs_price", "bs_delta", "prob_between", "lognormal_pdf", "expected_payoff",
+    "norm_cdf", "bs_price", "bs_delta", "strike_for_delta",
+    "prob_between", "lognormal_pdf", "expected_payoff",
     "PROJECT_ROOT", "DATA_DIR", "sources",
 ]

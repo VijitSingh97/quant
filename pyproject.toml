@@ -21,6 +21,7 @@ btcvol-dashboard  = "btcvol.dashboard:main"
 btcvol-monitor    = "btcvol.monitor:main"
 btcvol-carry      = "btcvol.backtests.carry:main"
 btcvol-vrp        = "btcvol.backtests.vrp:main"
+btcvol-condor-bt  = "btcvol.backtests.structures:main"
 btcvol-structures = "btcvol.structures:main"
 btcvol-log        = "btcvol.logger:main"
 
