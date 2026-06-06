@@ -68,9 +68,35 @@ Confirm the engine's view of your positions/equity matches the Hyperliquid UI ex
 make live-monitor      # your real account appears next to the paper book
 ```
 
+## Step 2.5 — Testnet: a real API that tracks balances (no real money) ★ recommended
+
+Before risking a cent, run the **whole thing against Hyperliquid testnet** — a real API
+with a faucet that signs orders, fills them, and **tracks your balances/positions/funding
+server-side**. This is the safe way to **(a) test the live signing path** and **(b)
+reconcile the exchange's numbers against ours**.
+
+```bash
+# 1. create a testnet account + agent key at https://app.hyperliquid-testnet.xyz, fund via the faucet
+# 2. point EVERYTHING at testnet and arm:
+BASIS_HL_TESTNET=1 BASIS_MODE=live BASIS_LIVE_ARM=1 \
+  BASIS_HL_ADDRESS=0xYourTestnetAddr BASIS_HL_API_SECRET=0xTestnetAgentKey \
+  BASIS_MAX_ORDER_USD=50 python -m basis.live.engine        # one cycle
+# 3. check it in the testnet UI; then run it scheduled for a few days.
+```
+`BASIS_HL_TESTNET=1` routes market data, account state, **and** the signer to
+`hyperliquid-testnet.xyz` so the run is self-consistent. Caveat: testnet **funding and
+liquidity ≠ mainnet**, so the *economics* won't match real carry — but the **accounting
+does**, which is the point: do orders sign + fill, are balances/positions/funding tracked,
+and does our `basis-report` (reading the testnet account) line up with the testnet UI.
+
+**Reconciling their numbers vs ours:** run a paper book and a testnet book over the same
+period, then `make report-auto` / `basis-report` on each — the equity, fills, and funding
+should agree (within testnet's different funding). Discrepancies = an accounting bug to fix
+*before* mainnet.
+
 ## Step 3 — Verify ONE live order by hand (the critical step)
 
-Because the submission path is untested against the venue, prove it with a single tiny
+Because the submission path is untested against the *mainnet* venue, prove it with a single tiny
 order before you trust the loop:
 
 ```bash

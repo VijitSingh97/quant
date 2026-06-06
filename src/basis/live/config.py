@@ -54,6 +54,11 @@ LIVE = MODE == "live"
 LIVE_ARM = _env("LIVE_ARM", "0") == "1"
 VENUE = _env("VENUE", "hyperliquid").lower()
 
+# Testnet: route the WHOLE HL surface (market data + account + order signing) to
+# api.hyperliquid-testnet.xyz. A real API that tracks balances server-side, with a faucet —
+# the safe way to validate the live signing + reconcile our numbers vs the exchange's,
+# with no real money. (core/sources reads BASIS_HL_TESTNET directly; keep them in sync.)
+HL_TESTNET = _env("HL_TESTNET", "0") == "1"
 # Read-only Hyperliquid account address (public clearinghouseState — no secret needed)
 HL_ADDRESS = _env("HL_ADDRESS", "")
 # Live order signing key (agent/API wallet — CANNOT withdraw). Only read in live mode.
@@ -107,7 +112,7 @@ KILL_FILE = DATA_DIR / "KILL_SWITCH"          # presence halts ALL trading (any 
 
 
 def summary():
-    return (f"mode={MODE} venue={VENUE} asset={SYMBOL} capital={CAPITAL_BTC}BTC "
+    return (f"mode={MODE}{'(TESTNET)' if HL_TESTNET else ''} venue={VENUE} asset={SYMBOL} capital={CAPITAL_BTC}BTC "
             f"deploy={DEPLOY_FRACTION:.0%} timed={FUNDING_TIMED} "
             f"cost={COST_PER_LEG_BPS:.1f}bps/leg | limits: "
             f"notional<=${MAX_NOTIONAL_USD:,.0f} lev<={MAX_LEVERAGE} "

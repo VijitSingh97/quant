@@ -1,17 +1,17 @@
-"""Hyperliquid client — READ-ONLY first.
+"""Hyperliquid client.
 
-Market data (mark, funding) is public. Account state (positions, equity) is also
-public given a wallet address — so Phase-1 read-only needs only BASIS_HL_ADDRESS,
-no secret. Order placement is GATED: it raises until live mode + an agent-wallet
-signer are wired (Phase 3), and agent wallets cannot withdraw by design.
+Market data (mark, funding) is public; account state (positions, equity) is public given
+a wallet address (read-only needs only BASIS_HL_ADDRESS, no secret). Order placement signs
+via the agent wallet behind the live+armed two-gate (agent wallets cannot withdraw).
+BASIS_HL_TESTNET=1 routes everything — info, account, and the signer — to the Hyperliquid
+TESTNET (a real API with a faucet that tracks balances server-side): the safe way to test
+the signing path and reconcile our numbers vs the exchange's, with no real money.
 """
 
 from .base import ExchangeClient
 from .. import config
 from ...core.http import http_post
-from ...core.sources import hyperliquid_perp
-
-INFO = "https://api.hyperliquid.xyz/info"
+from ...core.sources import hyperliquid_perp, HL_INFO
 
 
 class HyperliquidClient(ExchangeClient):
@@ -20,6 +20,7 @@ class HyperliquidClient(ExchangeClient):
     def __init__(self, address="", symbol=None):
         self.address = address or config.HL_ADDRESS
         self.symbol = symbol or config.SYMBOL
+        self.info_url = HL_INFO          # mainnet, or testnet when BASIS_HL_TESTNET=1
 
     def mark_price(self, symbol=None):
         return hyperliquid_perp(symbol or self.symbol)["mark"]
@@ -36,19 +37,19 @@ class HyperliquidClient(ExchangeClient):
 
     def positions(self):
         self._require_address()
-        perp = http_post(INFO, {"type": "clearinghouseState", "user": self.address})
+        perp = http_post(self.info_url, {"type": "clearinghouseState", "user": self.address})
         perp_qty = 0.0
         for ap in perp.get("assetPositions", []):
             p = ap.get("position", {})
             if p.get("coin") == self.symbol:
                 perp_qty = float(p.get("szi", 0.0))
-        spot = http_post(INFO, {"type": "spotClearinghouseState", "user": self.address})
+        spot = http_post(self.info_url, {"type": "spotClearinghouseState", "user": self.address})
         spot_qty = sum(float(b["total"]) for b in spot.get("balances", []) if b.get("coin") == self.symbol)
         return {"spot": spot_qty, "perp": perp_qty}
 
     def equity_usd(self):
         self._require_address()
-        st = http_post(INFO, {"type": "clearinghouseState", "user": self.address})
+        st = http_post(self.info_url, {"type": "clearinghouseState", "user": self.address})
         return float(st.get("marginSummary", {}).get("accountValue", 0.0))
 
     def _signer(self):
@@ -64,7 +65,8 @@ class HyperliquidClient(ExchangeClient):
         except ImportError as e:
             raise RuntimeError('live trading needs the signer deps: pip install -e ".[live]"') from e
         wallet = Account.from_key(config.HL_API_SECRET)
-        return Exchange(wallet, constants.MAINNET_API_URL, account_address=self.address or wallet.address)
+        url = constants.TESTNET_API_URL if config.HL_TESTNET else constants.MAINNET_API_URL
+        return Exchange(wallet, url, account_address=self.address or wallet.address)
 
     def place_order(self, order):
         # Triple gate so live trading can never happen by accident:

@@ -386,6 +386,12 @@ so an existing `.env` keeps working after the rename.
 | **3. Live, tiny** | `pip install -e ".[live]"`, `basis-preflight`, then `BASIS_MODE=live BASIS_LIVE_ARM=1` | HL **agent wallet** (cannot withdraw) + tiny deposit | a fraction of 0.1 BTC | 🔌 wired, gated — **needs your key + first-order check** |
 | **4. Scaled** | same, caps raised | — | scales as it proves out | — |
 
+**Testnet first (`BASIS_HL_TESTNET=1`):** routes the whole HL surface — market data,
+account, and the order signer — to Hyperliquid testnet, a **real API with a faucet that
+tracks balances server-side**. It's the safe way to exercise the live signing path and
+reconcile the exchange's numbers against ours with **no real money** (testnet economics ≠
+mainnet, but the accounting matches). See GOING_LIVE.md Step 2.5.
+
 **Funding:** you deposit USDC/BTC into your own Hyperliquid account; the system
 trades within it and has no withdrawal rights. Live order signing **is wired** (official
 HL SDK, behind the live+armed two-gate) but is **untested against the venue** — so the

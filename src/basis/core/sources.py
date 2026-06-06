@@ -7,6 +7,7 @@ plain dicts/lists; presentation lives in the tool modules.
 
 import gzip
 import math
+import os
 import statistics
 import socket
 import time
@@ -17,6 +18,14 @@ from urllib.parse import quote
 from .http import http_get, http_post, UA, TIMEOUT
 from .stats import (DAYS, OKX_FUNDINGS_PER_DAY, HL_FUNDINGS_PER_DAY,
                     cc_vol, parkinson_vol, log_returns)
+
+# Hyperliquid base — switch the WHOLE HL surface (market data + account) to testnet with
+# BASIS_HL_TESTNET=1, so a testnet run is self-consistent (read env directly; core can't
+# import the live config). The signer is routed to testnet in the live client too.
+HL_API = ("https://api.hyperliquid-testnet.xyz"
+          if os.environ.get("BASIS_HL_TESTNET") == "1" or os.environ.get("BTCVOL_HL_TESTNET") == "1"
+          else "https://api.hyperliquid.xyz")
+HL_INFO = HL_API + "/info"
 
 
 # --------------------------------------------------------------------------- #
@@ -149,7 +158,7 @@ def yahoo_chart(symbol, rng="2y", interval="1d"):
 
 def hl_all_funding():
     """Every Hyperliquid perp -> {coin: {apr, oi_usd, mark}} in one call (the broad scan)."""
-    meta, ctxs = http_post("https://api.hyperliquid.xyz/info", {"type": "metaAndAssetCtxs"})
+    meta, ctxs = http_post(HL_INFO, {"type": "metaAndAssetCtxs"})
     out = {}
     for a, c in zip(meta["universe"], ctxs):
         try:
@@ -165,7 +174,7 @@ def hl_funding_stats(coin, days=14):
     """Persistence of HL funding over `days`: annualized mean, range, % hours positive.
     A high mean with most hours positive = structurally hot (e.g. hard-to-short XMR)."""
     start = int(time.time() * 1000) - days * 24 * 3600 * 1000
-    rows = http_post("https://api.hyperliquid.xyz/info",
+    rows = http_post(HL_INFO,
                      {"type": "fundingHistory", "coin": coin, "startTime": start})
     r = [float(x["fundingRate"]) for x in rows]
     if not r:
@@ -178,7 +187,7 @@ def hl_funding_stats(coin, days=14):
 def hl_l2_book(coin):
     """Hyperliquid L2 order book for a perp -> {bids:[(px,sz)], asks:[(px,sz)], mid}.
     Public/keyless. Used to compute real depth-based slippage for an order size."""
-    d = http_post("https://api.hyperliquid.xyz/info", {"type": "l2Book", "coin": coin})
+    d = http_post(HL_INFO, {"type": "l2Book", "coin": coin})
     levels = d.get("levels", [[], []])
     bids = [(float(x["px"]), float(x["sz"])) for x in levels[0]]
     asks = [(float(x["px"]), float(x["sz"])) for x in levels[1]]
@@ -197,7 +206,7 @@ def hl_funding_series(coin, days=365, pause=0.35):
         rows = None
         for attempt in range(5):
             try:
-                rows = http_post("https://api.hyperliquid.xyz/info",
+                rows = http_post(HL_INFO,
                                  {"type": "fundingHistory", "coin": coin, "startTime": start})
                 break
             except (urllib.error.URLError, socket.timeout) as e:   # 429, timeout, transient
@@ -373,7 +382,7 @@ def okx_perp(inst="BTC-USDT-SWAP"):
 
 
 def hyperliquid_perp(coin="BTC"):
-    meta, ctxs = http_post("https://api.hyperliquid.xyz/info", {"type": "metaAndAssetCtxs"})
+    meta, ctxs = http_post(HL_INFO, {"type": "metaAndAssetCtxs"})
     i = next(k for k, a in enumerate(meta["universe"]) if a["name"] == coin)
     c = ctxs[i]
     rate = float(c["funding"])                 # hourly

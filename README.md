@@ -255,7 +255,7 @@ make test              # offline unit suite (default, ~0.1s)
 make test-integration  # opt-in: hit live venues and assert response shapes
 ```
 
-**182 tests, fully offline** (no network — the suite runs in ~0.3s). Coverage spans the
+**183 tests, fully offline** (no network — the suite runs in ~0.3s). Coverage spans the
 pure logic: vol math / Sharpe / drawdown / Pearson, Black-Scholes + greeks + strike-from-
 delta, the IV-surface smile/skew fit, position sizing, the asset registry, the backtest
 factor math (incl. the rotation `compute`/curve/alignment helpers), the auto-selector

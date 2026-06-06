@@ -70,6 +70,8 @@ def _gather():
                      else "not armed (safe) — set BASIS_LIVE_ARM=1 to actually trade"))
     results.append(_r("kill switch off", FAIL if config.KILL_FILE.exists() else PASS,
                      "ACTIVE — remove data/KILL_SWITCH" if config.KILL_FILE.exists() else "off"))
+    results.append(_r("network", PASS,
+                     "TESTNET (faucet funds, no real money)" if config.HL_TESTNET else "MAINNET (real money)"))
     # deps + key + account address
     results.append(check_deps())
     results.append(check_key())
