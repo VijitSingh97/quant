@@ -207,6 +207,8 @@ Backtests run on the full free history (DVOL backfills ~3y on Deribit; we use al
   (Sharpe 3.3, −0.8% *modelled* drawdown) over 3 years — unlevered ~+5.6%, cyclical
   (+8.6% 2024 → +5.4% 2025 → +1.0% in the 2026 correction). Caveat: the real tail
   (exchange insolvency / short-leg liquidation) isn't in that curve, so the Sharpe is flattered.
+  *Timing* the leg by a trailing-24h funding-sign forecast (Inan 2024) modestly helps — CAGR
+  +5.8% vs +5.6% unlevered, higher Sharpe, only ~80% in-market (sidesteps the negative stretches).
 - **Vol-risk-premium is real but tail-driven.** Implied > realized most days; selling
   30d vol *naked* wins often, but one spike (Jan-2026: realized 67% vs implied 39%,
   **−28.8 vol pts**) erases many wins ⇒ sell **defined-risk**, never naked.

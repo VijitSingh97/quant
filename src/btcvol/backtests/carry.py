@@ -49,6 +49,19 @@ def run(years=2):
     worst = min(rates) * 100
     best = max(rates) * 100
 
+    # Funding is predictable (Inan 2024): time the leg with a trailing persistence
+    # forecast — only hold (accrue funding) when the last FC hours averaged positive.
+    FC = 24
+    hold = [(i < FC) or (statistics.mean(rates[i - FC:i]) > 0) for i in range(n)]
+    timed_rets = [rates[i] if hold[i] else 0.0 for i in range(n)]
+    timed_eq = [1.0]
+    for r in timed_rets:
+        timed_eq.append(timed_eq[-1] * (1 + r))
+    timed_net = timed_eq[-1] - 1 - ROUND_TRIP_FEE
+    timed_cagr = (1 + timed_net) ** (DAYS / span_days) - 1
+    timed_sharpe = sharpe(timed_rets, PERIODS_PER_YEAR)
+    pct_in_mkt = sum(hold) / n * 100
+
     roll = [statistics.mean(rates[i - WIN:i]) * PERIODS_PER_YEAR for i in range(WIN, n + 1)]
     roll_min = min(roll) if roll else None
     roll_max = max(roll) if roll else None
@@ -67,6 +80,10 @@ def run(years=2):
     print(f"  mean funding         {fmt_pct(ann_funding_apr)} APR")
     print(f"  gross total          {fmt_pct(gross_total)}")
     print(f"  net total (–{ROUND_TRIP_FEE*100:.2f}% fees) {fmt_pct(net_total)}   ->  CAGR {fmt_pct(cagr)}")
+    print(f"\nFUNDING-TIMED CARRY  (hold only when trailing-24h funding > 0 — Inan 2024 predictability)")
+    ts = f"{timed_sharpe:.2f}" if timed_sharpe else "n/a"
+    print(f"  CAGR {fmt_pct(timed_cagr)} (vs always-on {fmt_pct(cagr)})   Sharpe {ts} (vs {shp:.2f})   "
+          f"in-market {pct_in_mkt:.0f}% of the time")
     print(f"\nRISK (of the funding stream — excludes exchange/liquidation tail)")
     print(f"  Sharpe (funding)     {shp:.2f}" if shp else "  Sharpe               n/a")
     print(f"  max drawdown         {fmt_pct(mdd)}")
