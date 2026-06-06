@@ -56,6 +56,7 @@ A `Makefile` wraps the common commands: `make dashboard`, `make monitor`,
 | `btcvol.skew` / `btcvol-skew` | Reads the live implied-vol **surface**: per-expiry ATM/25Δ vols, risk-reversal (RR25) and butterfly (BF25), the ATM term structure (contango/backwardation), an ASCII smile, and a fitted parametric skew shape that the condor backtest reuses. |
 | `btcvol.monitor` / `btcvol-monitor` | Live perp funding across 4 venues, normalized to APR, plus the cross-venue spread / arb flag. |
 | `btcvol.book` / `btcvol-book` | **Delta-neutral book monitor.** Reads a positions file (spot/perp/option legs), prices each leg's delta off the live chain, reports net delta (BTC + USD), and suggests the perp hedge to flatten. `--threshold`, `--strict` (exit nonzero on drift). See `examples/positions.example.json`. |
+| `btcvol.analyze` / `btcvol-analyze` | Summarizes our **own captured** `data/timeseries.csv`: VRP, funding, skew (RR25/BF25), basis/OI distributions and exploratory correlations. Degrades gracefully with little history. |
 | `btcvol.logger` / `btcvol-log` | Appends one compact metrics row to `data/timeseries.csv` (spot, RV, DVOL, VRP, funding, basis, OI, and the IV-surface **ATM/RR25/BF25/term-slope** — skew has no public historical source, so we capture our own). The launchd target; migrates the CSV schema in place when columns are added. |
 
 ### Example
@@ -86,6 +87,7 @@ quant/
 │   ├── structures.py         defined-risk option structures vs live chain
 │   ├── skew.py               live implied-vol surface / skew reader
 │   ├── book.py               delta-neutral book monitor (net-delta drift)
+│   ├── analyze.py            analyze our own captured timeseries.csv
 │   ├── logger.py             compact CSV time-series logger (launchd target)
 │   ├── backtests/
 │   │   ├── carry.py          funding-carry backtest
@@ -194,5 +196,5 @@ vol-target your size, sell **defined-risk and filtered (DVOL>RV)**, never naked.
 - ~~Vol-surface & skew reader~~ — done (`btcvol.skew`); also feeds `--skew` into the condor backtest (which revealed flat-vol was over-optimistic)
 - ~~Capture 25Δ RR/BF over time in the logger~~ — done ([#1](https://github.com/VijitSingh97/quant/issues/1)); RR25/BF25/ATM/term-slope now logged
 - ~~Delta-neutral book monitor~~ — done (`btcvol.book`, [#3](https://github.com/VijitSingh97/quant/issues/3))
-- Analyze strategies on our own captured `timeseries.csv` ([#2](https://github.com/VijitSingh97/quant/issues/2)) — grows useful as history accrues
+- ~~Analyze strategies on our own captured `timeseries.csv`~~ — done (`btcvol.analyze`, [#2](https://github.com/VijitSingh97/quant/issues/2)); grows useful as history accrues
 - Historical-skew condor backtest (drop the static-shape assumption) once the logged skew series is long enough
