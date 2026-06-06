@@ -50,7 +50,8 @@ def paper_book(store):
     perp = p.get("perp", {}).get("qty", 0.0)
     return {"spot": spot, "perp": perp, "net_delta": spot + perp,
             "cash": p.get("cash_usd", {}).get("qty", 0.0),
-            "funding_usd": p.get("funding_usd", {}).get("qty", 0.0)}
+            "funding_usd": p.get("funding_usd", {}).get("qty", 0.0),
+            "fees_usd": p.get("fees_usd", {}).get("qty", 0.0)}
 
 
 def position_summary(symbol, mark, book, equity, *, carry_on, kill):

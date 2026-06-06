@@ -20,8 +20,10 @@ import time
 
 from ..core import DAYS, max_drawdown, sharpe, sparkline, fmt_pct
 from ..core.sources import deribit_funding_history
+from ..live import config
 
-ROUND_TRIP_FEE = 0.0010   # ~10 bps all-in to open+close both legs (taker, conservative)
+# enter (spot+perp) + exit (spot+perp) = 4 legs, at the shared per-leg cost assumption
+ROUND_TRIP_FEE = 4 * config.COST_PER_LEG_BPS / 1e4   # ~38 bps all-in (taker+slippage), one-time on a multi-year hold
 PERIODS_PER_YEAR = 24 * DAYS              # funding accrues hourly
 WIN = 30 * 24                            # 30-day rolling window in hourly prints
 

@@ -1,10 +1,12 @@
-"""Paper exchange — the default. Simulates fills at the live Hyperliquid mark (plus
-slippage) and persists positions/cash/funding in the Store, so a paper run produces
-the same audit trail a live run would.
+"""Paper exchange — the default. Simulates fills at the live Hyperliquid mark and
+persists positions/cash/funding/fees in the Store, so a paper run produces the same
+audit trail a live run would.
 
 Accounting (deliberately simple, documented): the carry is delta-neutral, so perp
 price-P&L offsets the spot leg — the P&L that matters is funding, which we accrue
-explicitly each cycle. equity = cash + spot·mark + accrued_funding − slippage.
+explicitly each cycle. EVERY fill (spot AND perp) is charged a transaction cost of
+TAKER_FEE_BPS + SLIPPAGE_BPS on its notional, debited from cash, so reported equity is
+NET OF FEES. equity = cash + spot·mark + accrued_funding  (fees already in cash).
 """
 
 import time
@@ -12,8 +14,6 @@ import time
 from .base import ExchangeClient
 from .. import config
 from ...core.sources import hyperliquid_perp
-
-SLIPPAGE = 0.0005          # 5 bps simulated taker slippage
 
 
 class PaperExchange(ExchangeClient):
@@ -27,6 +27,7 @@ class PaperExchange(ExchangeClient):
             store.set_position("spot", 0.0, 0.0)
             store.set_position("perp", 0.0, 0.0)
             store.set_position("funding_usd", 0.0, 0.0)
+            store.set_position("fees_usd", 0.0, 0.0)      # cumulative trading cost (≤ 0)
             store.set_position("last_funding_ts", time.time(), 0.0)
             store.log("paper_seed", {"usd": seed_usd})
 
@@ -64,9 +65,14 @@ class PaperExchange(ExchangeClient):
 
     def place_order(self, order):
         mark = self.mark_price()
-        fill = mark * (1 + SLIPPAGE) if order.side == "buy" else mark * (1 - SLIPPAGE)
+        # transaction cost (taker fee + slippage) on notional — charged on BOTH legs so
+        # the perp leg's cost isn't invisible. Filled at mark; the cost is the explicit drag.
+        cost = order.qty * mark * config.COST_PER_LEG_BPS / 1e4
         new_leg = self._q(order.leg) + order.signed_qty
-        self.store.set_position(order.leg, new_leg, fill)
-        if order.leg == "spot":                      # spot trades move cash; perp is margin
-            self.store.set_position("cash_usd", self._q("cash_usd") - order.signed_qty * fill, 1.0)
-        return {"status": "filled", "price": fill, "qty": order.qty}
+        self.store.set_position(order.leg, new_leg, mark)
+        if order.leg == "spot":                      # spot moves cash by notional; perp is margin
+            self.store.set_position("cash_usd", self._q("cash_usd") - order.signed_qty * mark - cost, 1.0)
+        else:
+            self.store.set_position("cash_usd", self._q("cash_usd") - cost, 1.0)   # perp: just the fee
+        self.store.set_position("fees_usd", self._q("fees_usd") - cost, 0.0)
+        return {"status": "filled", "price": mark, "qty": order.qty, "cost": round(cost, 6)}

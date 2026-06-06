@@ -32,9 +32,11 @@ import time
 
 from ..core import DAYS, fmt_pct, max_drawdown, sharpe
 from ..core.sources import hl_funding_series
+from ..live import config
 from ..live.selector import select_asset
 
 HOURS_Y = 24 * DAYS
+DEFAULT_COST_BPS = config.COST_PER_LEG_BPS    # one fee assumption shared with live (taker+slippage)
 
 
 def _aligned(series):
@@ -97,7 +99,7 @@ def pull_series(universe, days, pause=1.0, log_fn=None):
     return series
 
 
-def compute(series, window=14, cadence=24, min_funding=0.05, switch_margin=0.05, cost_bps=5.0):
+def compute(series, window=14, cadence=24, min_funding=0.05, switch_margin=0.05, cost_bps=DEFAULT_COST_BPS):
     """Pure (no network/printing): given funding series, return a structured result dict
     comparing rotation (net of cost) to each fixed-hold baseline. Reused by the CLI and
     the scheduled self-validation."""
@@ -147,7 +149,7 @@ def _pct(x):
 
 
 def run(days=365, window=14, cadence=24, min_funding=0.05, switch_margin=0.05,
-        cost_bps=5.0, universe=("BTC", "ETH", "SOL", "HYPE")):
+        cost_bps=DEFAULT_COST_BPS, universe=("BTC", "ETH", "SOL", "HYPE")):
     print(f"\nPulling HL funding history ({days}d) for {', '.join(universe)} …")
     series = pull_series(universe, days,
                          log_fn=lambda c, k: print(f"  {c:5} {k:>5} hourly points" if k else f"  {c:5} no data"))
@@ -195,7 +197,7 @@ def main():
     ap.add_argument("--cadence", type=int, default=24, help="rebalance decision interval (hours)")
     ap.add_argument("--min-funding", type=float, default=0.05, help="min trailing APR to deploy")
     ap.add_argument("--switch-margin", type=float, default=0.05, help="hysteresis: APR edge to rotate")
-    ap.add_argument("--cost-bps", type=float, default=5.0, help="taker+slippage per leg")
+    ap.add_argument("--cost-bps", type=float, default=DEFAULT_COST_BPS, help="taker+slippage per leg")
     ap.add_argument("--universe", default="BTC,ETH,SOL,HYPE", help="comma list (spot-able)")
     a = ap.parse_args()
     run(days=a.days, window=a.window, cadence=a.cadence, min_funding=a.min_funding,

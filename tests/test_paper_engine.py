@@ -37,12 +37,16 @@ def test_buy_spot_reduces_cash(tmp_path):
     assert px.store.positions()["cash_usd"]["qty"] < 6000      # cash spent on spot
 
 
-def test_perp_is_margin_no_cash_move(tmp_path):
+def test_perp_is_margin_only_fee_moves_cash(tmp_path):
+    from basis.live import config
     px = _px(tmp_path)
     cash0 = px.store.positions()["cash_usd"]["qty"]
     px.place_order(Order("BTC", "sell", 0.05, "perp"))
     assert abs(px.positions()["perp"] + 0.05) < 1e-9
-    assert abs(px.store.positions()["cash_usd"]["qty"] - cash0) < 1e-9
+    # perp is margin: cash only moves by the transaction FEE, not the notional
+    fee = 0.05 * 60000 * config.COST_PER_LEG_BPS / 1e4
+    assert abs((cash0 - px.store.positions()["cash_usd"]["qty"]) - fee) < 1e-6
+    assert fee < 0.05 * 60000 * 0.01                          # fee << notional
 
 
 def test_delta_neutral_equity_preserved(tmp_path):
@@ -50,7 +54,18 @@ def test_delta_neutral_equity_preserved(tmp_path):
     px.place_order(Order("BTC", "buy", 0.05, "spot"))
     px.place_order(Order("BTC", "sell", 0.05, "perp"))
     assert abs(px.positions()["spot"] + px.positions()["perp"]) < 1e-9   # neutral
-    assert 5980 < px.equity_usd() <= 6000                                # ~seed minus slippage
+    assert 5980 < px.equity_usd() < 6000                                 # seed minus fees on both legs
+
+
+def test_fees_reduce_equity_and_are_tracked(tmp_path):
+    from basis.live import config
+    px = _px(tmp_path)
+    px.place_order(Order("BTC", "buy", 0.05, "spot"))
+    px.place_order(Order("BTC", "sell", 0.05, "perp"))
+    fees = px.store.positions()["fees_usd"]["qty"]
+    expected = -2 * (0.05 * 60000 * config.COST_PER_LEG_BPS / 1e4)        # two legs
+    assert abs(fees - expected) < 1e-6
+    assert px.equity_usd() <= 6000 + fees + 1e-6                          # equity is net of fees
 
 
 def test_accrue_funding_credits_short(tmp_path):

@@ -59,7 +59,7 @@
 
   <div class="grid">
     <div class="card"><h3>Net delta</h3><div id="delta" class="big">—</div><div id="deltaSub" class="sub">BTC</div></div>
-    <div class="card"><h3>Equity</h3><div id="equity" class="big">—</div><div class="sub">paper book</div></div>
+    <div class="card"><h3>Equity</h3><div id="equity" class="big">—</div><div class="sub">paper book · net of fees</div></div>
     <div class="card"><h3>Funding earned</h3><div id="funding" class="big">—</div><div class="sub">accrued (paper)</div></div>
     <div class="card"><h3>Funding rate</h3><div id="apr" class="big">—</div><div id="carry" class="sub">—</div></div>
   </div>
@@ -147,7 +147,8 @@ async function tick(){
   let rows=`<tr><td class="mut">leg</td><td class="mut">target</td><td class="mut">actual</td></tr>`+
     `<tr><td>spot</td><td>${btc(t.spot)}</td><td>${btc(p.spot)}</td></tr>`+
     `<tr><td>perp</td><td>${btc(t.perp)}</td><td class="neg">${btc(p.perp)}</td></tr>`+
-    `<tr><td>cash</td><td></td><td>${usd(p.cash)}</td></tr>`;
+    `<tr><td>cash</td><td></td><td>${usd(p.cash)}</td></tr>`+
+    `<tr><td>fees paid</td><td></td><td class="neg">${usd(p.fees_usd)}</td></tr>`;
   if(s.live){ rows+= s.live.error
     ? `<tr><td>live acct</td><td colspan=2 class="mut">${s.live.error}</td></tr>`
     : `<tr><td>live acct</td><td class="mut">${s.live.address.slice(0,8)}…</td><td>Δ ${btc(s.live.net_delta)} · ${usd(s.live.equity)}</td></tr>`; }

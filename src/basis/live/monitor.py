@@ -42,7 +42,7 @@ def main():
     b = s["paper"]
     print(f"\n  PAPER book   spot {b['spot']:+.4f}  perp {b['perp']:+.4f}  net delta {b['net_delta']:+.4f} {sym}")
     print(f"               cash ${b['cash']:,.2f}   funding earned ${b['funding_usd']:,.4f}   "
-          f"equity ${s['equity']:,.2f}")
+          f"fees paid ${abs(b.get('fees_usd', 0.0)):,.4f}   equity ${s['equity']:,.2f} (net of fees)")
     t = s["target"]
     print(f"  target       spot {t['spot']:+.4f}  perp {t['perp']:+.4f}  (deploy {config.DEPLOY_FRACTION:.0%})")
 

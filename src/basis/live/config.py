@@ -44,6 +44,11 @@ CAPITAL_BTC = _f("CAPITAL_BTC", "0.1")            # paper seed / target capital
 DEPLOY_FRACTION = _f("DEPLOY_FRACTION", "0.85")   # rest held as buffer
 FUNDING_TIMED = _env("FUNDING_TIMED", "1") == "1"
 
+# --- trading costs (charged on every fill so profitability is reported NET of fees) ---
+TAKER_FEE_BPS = _f("TAKER_FEE_BPS", "4.5")        # HL taker ~4.5 bps (volume-tiered)
+SLIPPAGE_BPS = _f("SLIPPAGE_BPS", "5.0")          # modelled adverse fill on a market order
+COST_PER_LEG_BPS = TAKER_FEE_BPS + SLIPPAGE_BPS   # total per-fill transaction cost (one source of truth)
+
 # --- hard risk limits (enforced pre-trade; USD so they're asset-agnostic) ---
 MAX_NOTIONAL_USD = _f("MAX_NOTIONAL_USD", "10000")
 MAX_LEVERAGE = _f("MAX_LEVERAGE", "2.0")
@@ -73,6 +78,7 @@ KILL_FILE = DATA_DIR / "KILL_SWITCH"          # presence halts ALL trading (any 
 
 def summary():
     return (f"mode={MODE} venue={VENUE} asset={SYMBOL} capital={CAPITAL_BTC}BTC "
-            f"deploy={DEPLOY_FRACTION:.0%} timed={FUNDING_TIMED} | limits: "
+            f"deploy={DEPLOY_FRACTION:.0%} timed={FUNDING_TIMED} "
+            f"cost={COST_PER_LEG_BPS:.1f}bps/leg | limits: "
             f"notional<=${MAX_NOTIONAL_USD:,.0f} lev<={MAX_LEVERAGE} "
             f"order<=${MAX_ORDER_USD:,.0f} delta-band=${MAX_ABS_DELTA_USD:,.0f}")
