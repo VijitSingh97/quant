@@ -13,13 +13,12 @@ from ..core.sources import hyperliquid_perp, deribit_dvol
 
 def market_snapshot():
     hl = hyperliquid_perp(config.SYMBOL)
-    btc_mark = hl["mark"] if config.SYMBOL == "BTC" else hyperliquid_perp("BTC")["mark"]
     try:
         dv = deribit_dvol(days=2, resolution="1D")
         dvol = dv[-1][1] if dv else None
     except Exception:       # noqa: BLE001
         dvol = None
-    return {"mark": hl["mark"], "btc_mark": btc_mark, "funding_apr": hl["funding_apr"],
+    return {"mark": hl["mark"], "funding_apr": hl["funding_apr"],
             "funding_rate_1h": hl["funding_rate_1h"], "dvol": dvol, "ts": time.time()}
 
 
@@ -50,10 +49,6 @@ def build_status(store, market=None, include_live=True):
     if include_live and config.HL_ADDRESS:
         from .exchanges.hyperliquid import HyperliquidClient
         live = live_account(HyperliquidClient())
-    # The GOAL is BTC accrual: value the book in BTC and compare to just holding it.
-    btc_mark = market.get("btc_mark") or market["mark"]
-    btc_equity = (equity / btc_mark) if btc_mark else None
-    btc_accrued = (btc_equity - config.CAPITAL_BTC) if btc_equity is not None else None
     return {
         "ts": time.time(), "mode": config.MODE, "venue": config.VENUE, "symbol": config.SYMBOL,
         "kill": config.KILL_FILE.exists(),
@@ -61,7 +56,6 @@ def build_status(store, market=None, include_live=True):
         "carry_on": (market["funding_apr"] > 0) or (not config.FUNDING_TIMED),
         "target": carry_target(equity, market["mark"], market["funding_apr"]),
         "paper": book, "live": live, "equity": equity,
-        "btc_start": config.CAPITAL_BTC, "btc_equity": btc_equity, "btc_accrued": btc_accrued,
         "config": config.summary(),
         "pnl_history": store.pnl_history(300),
         "audit": store.recent_events(15),

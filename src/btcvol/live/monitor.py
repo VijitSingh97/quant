@@ -27,10 +27,6 @@ def main():
     print(f"\n  PAPER book   spot {b['spot']:+.4f}  perp {b['perp']:+.4f}  net delta {b['net_delta']:+.4f} {sym}")
     print(f"               cash ${b['cash']:,.2f}   funding earned ${b['funding_usd']:,.4f}   "
           f"equity ${s['equity']:,.2f}")
-    if s.get("btc_equity"):
-        sign = "↑ accruing" if s["btc_accrued"] >= 0 else "↓ behind HODL"
-        print(f"  GOAL (BTC)   {s['btc_equity']:.6f} BTC   vs start {s['btc_start']} BTC   "
-              f"= {s['btc_accrued']:+.6f} BTC  ({sign})")
     t = s["target"]
     print(f"  target       spot {t['spot']:+.4f}  perp {t['perp']:+.4f}  (deploy {config.DEPLOY_FRACTION:.0%})")
 

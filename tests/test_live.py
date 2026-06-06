@@ -98,7 +98,4 @@ def test_build_status_offline(tmp_path):
     st = build_status(s, market=market, include_live=False)   # no network
     assert st["carry_on"] is True and st["target"]["spot"] > 0
     assert st["live"] is None and "pnl_history" in st and "audit" in st
-    # goal metric is BTC-denominated
-    assert st["btc_start"] == config.CAPITAL_BTC
-    assert abs(st["btc_equity"] - 6000 / 60000) < 1e-9      # equity / btc price
     s.close()
