@@ -121,15 +121,26 @@ lack of co-located spot. Hysteresis then *holds* HYPE until something beats it b
 
 ## Web dashboard (`make live-web` → http://localhost:8787)
 
-A dependency-free single-page dashboard (stdlib `http.server`). Up top, a **position
-banner** states plainly what we're in right now — the **pair** (`BTC-SPOT / BTC-PERP`),
-the **state** (DEPLOYED / FLAT / HALTED), the **legs**, the **leverage** and gross
-notional, and net delta — colour-coded (green deployed-neutral, amber flat, red halted).
-Below it: mode/venue badge, net-delta indicator, equity, funding earned, live funding
-rate (carry ON/OFF), target-vs-actual book, an equity sparkline, the cross-asset
-carry-opportunities panel, the read-only live account (if configured), and the live
-**audit trail** — auto-refreshing every 5s. The CLI (`make live-monitor`) shows the
-same POSITION block in text.
+A dependency-free single-page dashboard (stdlib `http.server`), organised top-to-bottom
+from *your book* to generic *market/system* data, auto-refreshing every 5s:
+
+- **Position banner** (top) — what we're in right now: the **pair**, **state** (DEPLOYED /
+  FLAT / WINDING DOWN / HALTED), the **legs**, **leverage** + gross notional, net delta —
+  colour-coded (green deployed-neutral, amber flat, red halted). A red **ARMED** badge
+  shows in the header when live trading is armed.
+- **Your book** — a 6-card stat row (equity net-of-fees, total return, APR, funding
+  earned, fees paid, net delta), the **target-vs-actual carry book** (legs/cash/funding/
+  fees), an **equity curve** (lo/hi/now), a **performance** table (return/APR/Sharpe/maxDD/
+  period/deployment/rotations), and the read-only **live account** (if configured).
+- **Strategy** — the **deployment** line (held asset, funding now vs 14d-avg, what's
+  deployed vs the best available), the **self-validation** panel (current vs best-in-sweep
+  + walk-forward verdict + suggestion, tuned-overrides note, CSV/JSON export), and the
+  **audit trail**.
+- **Market & system** — mark, funding rate, DVOL, cost/leg; the **carry-opportunities**
+  table (all perps by persistent funding); and a **system & risk-limits** table.
+
+The CLI (`make live-monitor`) shows the same POSITION block in text; `make report` /
+`make report-auto` print the period performance scorecard.
 
 ## Deploy on a home server (Docker) — recommended
 

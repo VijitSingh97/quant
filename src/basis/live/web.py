@@ -112,6 +112,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             s["live"] = c["live"]
             s["validation"] = _research(lambda st: st.latest_report("validation"))
             s["overrides"] = config.load_overrides()      # tuner-applied params (#18)
+            s["limits"] = {                                # system / risk config for the dashboard
+                "cost_bps": config.COST_PER_LEG_BPS, "max_notional_usd": config.MAX_NOTIONAL_USD,
+                "max_leverage": config.MAX_LEVERAGE, "max_order_usd": config.MAX_ORDER_USD,
+                "deploy_fraction": config.DEPLOY_FRACTION, "funding_timed": config.FUNDING_TIMED,
+                "armed": config.LIVE_ARM,
+            }
             store2 = Store(config.DB_PATH)
             try:
                 from .report import compute as _perf
