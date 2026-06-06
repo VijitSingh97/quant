@@ -94,30 +94,34 @@ def _print_summary(s, risk):
     print(f"  equity curve     {sparkline(s['equity'])}")
 
 
-def simulate(delta=0.20, wing_pct=0.08, grid=1000.0, skew=False):
-    """Run the non-overlapping condor rolls. Returns dict(detail, always, filtered,
-    dates, skew, skew_note) — reused by run() (printing) and the combined-book backtest."""
+def load_market(skew=False):
+    """Pull DVOL + price path once (and fit live skew if requested). Reused across a
+    parameter sweep so we don't re-hit the API per combination."""
     iv_fn, skew_note = None, "flat vol"
     if skew:
         from ..core.surface import build_surface, fit_skew, skew_iv
         from ..core.sources import deribit_option_chain
-        surf = build_surface(deribit_option_chain())
-        fit = fit_skew(surf)
+        fit = fit_skew(build_surface(deribit_option_chain()))
         coeffs = fit["coeffs"]
         iv_fn = lambda atm, T, K, S: skew_iv(coeffs, atm, T, K, S)
         skew_note = f"skew from live {fit['ref_expiry']} surface (a={tuple(round(c,3) for c in coeffs)})"
 
     dvol = deribit_dvol(days=400, resolution="1D")
     chart = deribit_chart("BTC-PERPETUAL", days=400, resolution="1D")
-    ticks, closes = chart["ticks"], chart["close"]
-
     iv_by_date = {time.strftime("%Y-%m-%d", time.gmtime(ts / 1000)): iv for ts, iv in dvol}
-    px_by_date = {time.strftime("%Y-%m-%d", time.gmtime(t / 1000)): c for t, c in zip(ticks, closes)}
+    px_by_date = {time.strftime("%Y-%m-%d", time.gmtime(t / 1000)): c
+                  for t, c in zip(chart["ticks"], chart["close"])}
     dates = sorted(set(iv_by_date) & set(px_by_date))
-    S = [px_by_date[d] for d in dates]
-    IV = [iv_by_date[d] for d in dates]
-    T = HOLD / YEAR
+    return {"dates": dates, "S": [px_by_date[d] for d in dates],
+            "IV": [iv_by_date[d] for d in dates], "T": HOLD / YEAR,
+            "iv_fn": iv_fn, "skew": skew, "skew_note": skew_note}
 
+
+def simulate_from(market, delta=0.20, wing_pct=0.08, grid=1000.0, fee_bps=0.0):
+    """Run the condor rolls against pre-loaded market data. fee_bps is a round-trip
+    cost (bps of notional) deducted from each roll's credit."""
+    S, IV, dates, T, iv_fn, skew = (market["S"], market["IV"], market["dates"],
+                                    market["T"], market["iv_fn"], market["skew"])
     detail, always, filtered = [], [], []
     i = 0
     while i + HOLD < len(S):
@@ -126,7 +130,8 @@ def simulate(delta=0.20, wing_pct=0.08, grid=1000.0, skew=False):
         rv_fwd = cc_vol(S[i: i + HOLD + 1], HOLD)
         c = _condor(st0, iv0, T, delta, wing_pct, grid, iv_fn)
         credit_flat = _condor(st0, iv0, T, delta, wing_pct, grid)["credit"] if skew else c["credit"]
-        pnl = _expiry_pnl(c, S[i + HOLD])
+        fee = fee_bps / 1e4 * st0
+        pnl = _expiry_pnl(c, S[i + HOLD]) - fee
         ror = pnl / c["max_loss"] if c["max_loss"] > 0 else 0.0
         row = {"date": d0, "iv": iv0, "rv_trail": rv_trail, "rv_fwd": rv_fwd,
                "credit": c["credit"], "credit_flat": credit_flat,
@@ -137,9 +142,13 @@ def simulate(delta=0.20, wing_pct=0.08, grid=1000.0, skew=False):
         filtered.append({**row, "active": sell, "ror": ror if sell else 0.0,
                          "pnl": pnl if sell else 0.0})
         i += HOLD
-
     return {"detail": detail, "always": always, "filtered": filtered,
-            "dates": dates, "skew": skew, "skew_note": skew_note}
+            "dates": dates, "skew": skew, "skew_note": market["skew_note"]}
+
+
+def simulate(delta=0.20, wing_pct=0.08, grid=1000.0, skew=False):
+    """Convenience: load market data then run one parameter set."""
+    return simulate_from(load_market(skew), delta, wing_pct, grid)
 
 
 def run(delta=0.20, wing_pct=0.08, risk=0.20, grid=1000.0, skew=False):

@@ -51,6 +51,7 @@ A `Makefile` wraps the common commands: `make dashboard`, `make monitor`,
 | `btcvol.dashboard` / `btcvol-dashboard` | One-shot snapshot: spot, realized vol, DVOL implied vol, futures-basis term structure, perp funding/OI — plus an interpreted **suggested direction**. Saves a JSON snapshot to `data/`. |
 | `btcvol.backtests.carry` / `btcvol-carry [years]` | Backtests long-spot/short-perp funding carry on multi-year Deribit hourly funding. APR, Sharpe, drawdown, % negative, yearly breakdown. |
 | `btcvol.backtests.vrp` / `btcvol-vrp` | Backtests selling 30d vol *naked* (DVOL vs forward realized). Win rate, avg premium, worst tail roll, Sharpe. |
+| `btcvol.backtests.robustness` / `btcvol-robust` | **Anti-overfit checks**: parameter sweep (Δ × wing), walk-forward (in/out-of-sample), and fee-drag — reuses one market pull. Verdict flags whether the edge is broad or a knife-edge. Flags: `--risk`, `--fee-bps`, `--flat`. |
 | `btcvol.backtests.combined` / `btcvol-combined` | **Combines the two engines into one book**: funding carry (levered) + the filtered, skew-priced condor, over a common window. Reports each leg vs combined (total/CAGR/Sharpe/maxDD) and the leg correlation. Flags: `--leverage`, `--risk`, `--flat`. |
 | `btcvol.backtests.structures` / `btcvol-condor-bt` | Backtests the **monthly defined-risk condor rule**: rolls a delta-based iron condor (synthetic credit @ historical DVOL, real price path for the payoff), compares sell-every-month vs a DVOL>RV filter, and shows the capped tail vs the naked book. Flags: `--delta`, `--wing-pct`, `--risk`. |
 | `btcvol.structures` / `btcvol-structures` | Builds **defined-risk** short-vol structures (iron condor, put/call credit spreads) from the live Deribit chain. Prices legs conservatively (sell at bid, buy wings at ask) and reports max loss, breakevens, probability of profit (BS under implied), expected value under realized, and an ASCII payoff diagram. Flags: `--dte`, `--delta`, `--wing`. |
@@ -96,7 +97,8 @@ quant/
 │   │   ├── carry.py          funding-carry backtest
 │   │   ├── vrp.py            volatility-risk-premium backtest (naked)
 │   │   ├── structures.py     monthly condor-rule backtest (flat or --skew)
-│   │   └── combined.py       carry + filtered-condor combined-book backtest
+│   │   ├── combined.py       carry + filtered-condor combined-book backtest
+│   │   └── robustness.py     param sweep / walk-forward / cost anti-overfit checks
 │   └── core/                 shared layer (no presentation)
 │       ├── http.py           keyless REST helpers
 │       ├── stats.py          vol math: cc/parkinson vol, sharpe, drawdown
@@ -197,9 +199,17 @@ offline — no network calls.
   cut combined max drawdown roughly in half (~−15% → ~−8%) and lifted combined Sharpe
   (~1.2 → ~1.7) for similar return — sizing, not selection, did that.
 
-**Takeaway:** both edges are real but tail-driven, and **skew makes defined-risk
-selling less generous than flat-vol intuition suggests**. The combined book is the
-strategy: carry base + filtered defined-risk condor overlay, vol-targeted, never naked.
+- **Robustness check** (anti-overfit): the condor edge is **parameter-sensitive** —
+  strong at ~20–25Δ / tight wings, negative at 10Δ (11/15 combos positive). Walk-forward
+  is the warning: the *best* in-sample params (Sharpe ~7 on 6 rolls) **collapsed to a
+  negative Sharpe out-of-sample** — the classic overfit signature. A 15bps/roll fee
+  costs ~4% CAGR. **Verdict: don't trust the optimized number; the edge is real-ish but
+  fragile on this little data.**
+
+**Takeaway:** both edges are real but tail-driven; **skew makes defined-risk selling
+less generous than flat-vol intuition suggests**; and **13 rolls can't confirm an edge**.
+The combined book is the *candidate* strategy — carry base + filtered defined-risk condor
+overlay, vol-targeted, never naked — but sizing stays small until issue #4's data grows.
 
 ---
 
@@ -213,4 +223,5 @@ strategy: carry base + filtered defined-risk condor overlay, vol-targeted, never
 - ~~Analyze strategies on our own captured `timeseries.csv`~~ — done (`btcvol.analyze`, [#2](https://github.com/VijitSingh97/quant/issues/2)); grows useful as history accrues
 - ~~Combined-book backtest (carry + filtered condor as one strategy)~~ — done (`btcvol.backtests.combined`, [#5](https://github.com/VijitSingh97/quant/issues/5))
 - ~~Position sizer (vol-target + fractional Kelly)~~ — done (`btcvol.size` + `core.sizing`, [#8](https://github.com/VijitSingh97/quant/issues/8)); wired into the combined book via `--vol-target`
-- Open issues: [#6](https://github.com/VijitSingh97/quant/issues/6) historical-skew backtest (blocked on [#4](https://github.com/VijitSingh97/quant/issues/4) data) · [#7](https://github.com/VijitSingh97/quant/issues/7) robustness/anti-overfit (param sweep, walk-forward, costs)
+- ~~Robustness / anti-overfit (param sweep, walk-forward, costs)~~ — done (`btcvol.backtests.robustness`, [#7](https://github.com/VijitSingh97/quant/issues/7))
+- Open: [#4](https://github.com/VijitSingh97/quant/issues/4) data tracker (always-on) · [#6](https://github.com/VijitSingh97/quant/issues/6) historical-skew backtest (blocked on #4 data accruing)
