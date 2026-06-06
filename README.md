@@ -59,7 +59,8 @@ A `Makefile` wraps the common commands: `make dashboard`, `make monitor`,
 | `btcvol.monitor` / `btcvol-monitor` | Live perp funding across 4 venues, normalized to APR, plus the cross-venue spread / arb flag. |
 | `btcvol.size` / `btcvol-size` | **Position sizer.** Vol-target scale (halve size when vol doubles) + fractional-Kelly stake from a win-rate/payoff. Flags: `--target-vol`, `--position-vol`, `--win-prob`, `--win-loss`. |
 | `btcvol.book` / `btcvol-book` | **Delta-neutral book monitor.** Reads a positions file (spot/perp/option legs), prices each leg's delta off the live chain, reports net delta (BTC + USD), and suggests the perp hedge to flatten. `--threshold`, `--strict` (exit nonzero on drift). See `examples/positions.example.json`. |
-| `btcvol.analyze` / `btcvol-analyze` | Summarizes our **own captured** `data/timeseries.csv`: VRP, funding, skew (RR25/BF25), basis/OI distributions and exploratory correlations. Degrades gracefully with little history. |
+| `btcvol.analyze` / `btcvol-analyze` | Summarizes our **own captured** `data/timeseries.csv`: VRP, funding, skew (RR25/BF25/RR10), basis/OI distributions and exploratory correlations. Degrades gracefully with little history. |
+| `btcvol.macro` / `btcvol-macro` | **Cross-asset VRP** for equities/commodities via Yahoo: implied (VIX-family `^VIX`/`^GVZ`/`^OVX`) vs realized for the S&P, gold, or oil. `--asset SPX\|GOLD\|OIL`. (Vol-selling ports; funding carry does not.) |
 | `btcvol.logger` / `btcvol-log` | Appends one compact metrics row to `data/timeseries.csv` (spot, RV, DVOL, VRP, funding, basis, OI, and the IV-surface **ATM/RR25/BF25/term-slope** — skew has no public historical source, so we capture our own). The launchd target; migrates the CSV schema in place when columns are added. |
 
 ### Example
@@ -108,6 +109,7 @@ quant/
 │   ├── size.py               position sizer (vol-target + fractional Kelly)
 │   ├── book.py               delta-neutral book monitor (net-delta drift)
 │   ├── analyze.py            analyze our own captured timeseries.csv
+│   ├── macro.py              cross-asset VRP (equities/commodities via Yahoo)
 │   ├── logger.py             compact CSV time-series logger (launchd target)
 │   ├── backtests/
 │   │   ├── carry.py          funding-carry backtest
@@ -150,6 +152,7 @@ All public, no API keys. Chosen because they're reachable without geo-blocks:
 | **Coinbase** | Spot + daily/hourly candles → realized vol, trend |
 | **Deribit** | DVOL (30d implied vol), dated-futures basis, BTC-PERPETUAL funding history (hourly, ~3y) |
 | **OKX**, **Hyperliquid**, **Kraken Futures** | Live perp funding + open interest |
+| **Yahoo Finance** | Non-crypto (#10): equity/commodity ETFs + CBOE vol indices (`^VIX`/`^GVZ`/`^OVX`) for cross-asset VRP |
 
 > Blocked from many regions: **Binance** (HTTP 451) and **Bybit** (HTTP 403) — not
 > used. Endpoints require a browser `User-Agent` (handled in `core/http.py`). OKX's

@@ -8,6 +8,7 @@ plain dicts/lists; presentation lives in the tool modules.
 import math
 import statistics
 import time
+from urllib.parse import quote
 
 from .http import http_get, http_post
 from .stats import (DAYS, OKX_FUNDINGS_PER_DAY, HL_FUNDINGS_PER_DAY,
@@ -81,6 +82,21 @@ def deribit_dvol(days=400, resolution="1D", currency="BTC"):
                     f"?currency={currency}&start_timestamp={start}&end_timestamp={now}"
                     f"&resolution={resolution}")["result"]["data"]
     return [(row[0], row[4] / 100.0) for row in data]   # close, % -> fraction
+
+
+def yahoo_chart(symbol, rng="2y", interval="1d"):
+    """Yahoo Finance daily OHLC -> {'ts', 'closes'} (oldest->newest, Nones dropped).
+
+    The non-crypto data source (#10): equity/commodity ETFs and the CBOE vol indices
+    (^VIX/^GVZ/^OVX) — the implied-vol analogues of Deribit DVOL.
+    """
+    url = (f"https://query1.finance.yahoo.com/v8/finance/chart/{quote(symbol)}"
+           f"?interval={interval}&range={rng}")
+    res = http_get(url)["chart"]["result"][0]
+    ts = res["timestamp"]
+    closes = res["indicators"]["quote"][0]["close"]
+    pairs = [(t, c) for t, c in zip(ts, closes) if c is not None]
+    return {"ts": [t for t, _ in pairs], "closes": [c for _, c in pairs]}
 
 
 def deribit_option_chain(currency="BTC", index_name="btc_usd"):

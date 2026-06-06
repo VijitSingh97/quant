@@ -29,6 +29,7 @@ btcvol-skew       = "btcvol.skew:main"
 btcvol-book       = "btcvol.book:main"
 btcvol-size       = "btcvol.size:main"
 btcvol-analyze    = "btcvol.analyze:main"
+btcvol-macro      = "btcvol.macro:main"
 btcvol-log        = "btcvol.logger:main"
 
 [tool.setuptools.packages.find]

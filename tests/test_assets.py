@@ -1,6 +1,6 @@
 import pytest
 
-from btcvol.core.assets import get_asset, ASSETS
+from btcvol.core.assets import get_asset, ASSETS, get_macro, MACRO_ASSETS
 from btcvol.backtests.structures import _nice_grid
 
 
@@ -28,3 +28,14 @@ def test_nice_grid_scales_to_price():
     assert _nice_grid(60000) == 1000      # BTC
     assert _nice_grid(1600) == 25         # ETH
     assert _nice_grid(65) == 1            # SOL
+
+
+def test_macro_registry():
+    m = get_macro("spx")
+    assert m["underlying"] == "^GSPC" and m["vol_index"] == "^VIX"
+    assert get_macro("GOLD")["vol_index"] == "^GVZ"
+
+
+def test_macro_unknown_raises():
+    with pytest.raises(ValueError):
+        get_macro("DOGE")

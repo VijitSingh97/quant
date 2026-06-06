@@ -27,3 +27,20 @@ def get_asset(name):
     if not a:
         raise ValueError(f"unknown asset '{name}'; known: {', '.join(ASSETS)}")
     return a
+
+
+# Non-crypto assets (#10) via Yahoo Finance: an underlying + its CBOE implied-vol
+# index (the VIX-family — the equity/commodity analogue of Deribit DVOL). There is
+# NO funding leg outside crypto, so only the vol/VRP engine applies here.
+MACRO_ASSETS = {
+    "SPX":  {"underlying": "^GSPC", "vol_index": "^VIX", "label": "S&P 500"},
+    "GOLD": {"underlying": "GLD",   "vol_index": "^GVZ", "label": "Gold (GLD)"},
+    "OIL":  {"underlying": "USO",   "vol_index": "^OVX", "label": "Oil (USO)"},
+}
+
+
+def get_macro(name):
+    m = MACRO_ASSETS.get((name or "SPX").upper())
+    if not m:
+        raise ValueError(f"unknown macro asset '{name}'; known: {', '.join(MACRO_ASSETS)}")
+    return m

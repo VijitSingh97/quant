@@ -1,6 +1,6 @@
 PY := PYTHONPATH=src python3
 
-.PHONY: help install dev test dashboard monitor carry vrp combined robust condor-bt structures skew book size analyze log launchd-install launchd-uninstall clean
+.PHONY: help install dev test dashboard monitor carry vrp combined robust condor-bt structures skew book size analyze macro log launchd-install launchd-uninstall clean
 
 help:
 	@echo "make install            editable install (pip install -e .)"
@@ -18,6 +18,7 @@ help:
 	@echo "make book               delta-neutral book monitor (net-delta drift)"
 	@echo "make size               position sizer (vol-target + fractional Kelly)"
 	@echo "make analyze            analyze our own captured data/timeseries.csv"
+	@echo "make macro              cross-asset VRP for equities/commodities (SPX/GOLD/OIL)"
 	@echo "make log                append one row to data/timeseries.csv"
 	@echo "make launchd-install    install the hourly logger launchd agent"
 	@echo "make launchd-uninstall  remove the launchd agent"
@@ -66,6 +67,9 @@ size:
 
 analyze:
 	$(PY) -m btcvol.analyze
+
+macro:
+	$(PY) -m btcvol.macro
 
 log:
 	$(PY) -m btcvol.logger
