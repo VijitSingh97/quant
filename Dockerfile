@@ -13,8 +13,11 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY src ./src
 
-# Install the package (no third-party deps), create the data dir, run as non-root.
-RUN pip install --no-cache-dir . \
+# INSTALL_LIVE=1 also pulls the [live] signer deps (eth-account + hyperliquid-python-sdk)
+# for testnet/live order signing. Default 0 keeps the paper image stdlib-only and tiny.
+ARG INSTALL_LIVE=0
+RUN if [ "$INSTALL_LIVE" = "1" ]; then pip install --no-cache-dir ".[live]"; \
+    else pip install --no-cache-dir .; fi \
  && mkdir -p /app/data \
  && useradd -u 10001 -m basis \
  && chown -R basis /app

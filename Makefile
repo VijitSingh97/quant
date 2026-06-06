@@ -1,6 +1,6 @@
 PY := PYTHONPATH=src python3
 
-.PHONY: help install dev test test-integration dashboard monitor carry vrp combined histskew robust condor-bt structures skew book size analyze macro backfill carry-scan execost rotation regime validate tune preflight report report-auto histskew2 live-paper live-auto live-monitor live-web log launchd-install launchd-uninstall live-auto-install live-auto-uninstall docker-up docker-down docker-logs clean
+.PHONY: help install dev test test-integration dashboard monitor carry vrp combined histskew robust condor-bt structures skew book size analyze macro backfill carry-scan execost rotation regime validate tune preflight report report-auto histskew2 live-paper live-auto live-monitor live-web log launchd-install launchd-uninstall live-auto-install live-auto-uninstall docker-up docker-down docker-logs testnet-run testnet-up testnet-down testnet-logs clean
 
 help:
 	@echo "make install            editable install (pip install -e .)"
@@ -44,6 +44,10 @@ help:
 	@echo "make docker-up          build + run the home-server stack (scheduler + web)"
 	@echo "make docker-down        stop the docker stack (keeps the data volume)"
 	@echo "make docker-logs        tail the scheduler logs"
+	@echo "make testnet-run        one engine cycle on testnet (real API, faucet money)"
+	@echo "make testnet-up         run the testnet validation continuously (+ web on :8788)"
+	@echo "make testnet-down       stop the testnet stack"
+	@echo "make testnet-logs       tail the testnet engine logs"
 
 install:
 	pip install -e .
@@ -167,6 +171,20 @@ docker-down:
 
 docker-logs:
 	docker compose logs -f basis
+
+# --- testnet (real API, faucet money) ---
+testnet-run:                       # one engine cycle on testnet (first manual verification)
+	@set -a; [ -f .env ] && . ./.env; set +a; \
+	BASIS_HL_TESTNET=1 BASIS_MODE=live BASIS_LIVE_ARM=1 $(PY) -m basis.live.engine
+
+testnet-up:                        # run the testnet engine continuously (few-weeks validation)
+	docker compose --profile testnet up -d --build
+
+testnet-down:
+	docker compose --profile testnet down
+
+testnet-logs:
+	docker compose logs -f basis-testnet
 
 clean:
 	rm -rf build dist *.egg-info src/*.egg-info .pytest_cache

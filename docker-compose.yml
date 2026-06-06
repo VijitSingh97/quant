@@ -44,5 +44,57 @@ services:
     depends_on:
       - basis
 
+  # --- TESTNET validation (opt-in: `docker compose --profile testnet up -d --build`) ---
+  # Real Hyperliquid API, faucet (fake) money. Runs the live carry ENGINE on testnet to
+  # validate signing + fills + accounting. Own volume so it never mixes with the paper run.
+  # Needs BASIS_HL_ADDRESS / BASIS_HL_API_SECRET (your TESTNET account) in .env.
+  testnet:
+    profiles: ["testnet"]
+    build:
+      context: .
+      args:
+        INSTALL_LIVE: "1"
+    image: basis-live:latest
+    container_name: basis-testnet
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      BASIS_HL_TESTNET: "1"
+      BASIS_MODE: live
+      BASIS_LIVE_ARM: "1"
+      BASIS_TASKS: paper                              # engine-only (the live carry); not logger/auto/validate
+      BASIS_CYCLE_SECONDS: ${BASIS_CYCLE_SECONDS:-3600}
+      BASIS_MAX_ORDER_USD: ${BASIS_TESTNET_MAX_ORDER_USD:-50}
+    volumes:
+      - basis-testnet-data:/app/data
+
+  testnet-web:
+    profiles: ["testnet"]
+    build:
+      context: .
+      args:
+        INSTALL_LIVE: "1"
+    image: basis-live:latest
+    container_name: basis-testnet-web
+    restart: unless-stopped
+    command: ["python", "-m", "basis.live.web"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      BASIS_HL_TESTNET: "1"
+      BASIS_WEB_HOST: 0.0.0.0
+      BASIS_WEB_PORT: "8788"
+      BASIS_DB: live.db                              # the testnet engine's book (+ reconcile vs the account)
+    ports:
+      - "8788:8788"
+    volumes:
+      - basis-testnet-data:/app/data
+    depends_on:
+      - testnet
+
 volumes:
   basis-data:
+  basis-testnet-data:

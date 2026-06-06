@@ -75,14 +75,21 @@ with a faucet that signs orders, fills them, and **tracks your balances/position
 server-side**. This is the safe way to **(a) test the live signing path** and **(b)
 reconcile the exchange's numbers against ours**.
 
+**Push-button:**
 ```bash
-# 1. create a testnet account + agent key at https://app.hyperliquid-testnet.xyz, fund via the faucet
-# 2. point EVERYTHING at testnet and arm:
-BASIS_HL_TESTNET=1 BASIS_MODE=live BASIS_LIVE_ARM=1 \
-  BASIS_HL_ADDRESS=0xYourTestnetAddr BASIS_HL_API_SECRET=0xTestnetAgentKey \
-  BASIS_MAX_ORDER_USD=50 python -m basis.live.engine        # one cycle
-# 3. check it in the testnet UI; then run it scheduled for a few days.
+# 1. create a testnet account + agent key at https://app.hyperliquid-testnet.xyz (faucet),
+#    and put the testnet address + agent key in .env (see the TESTNET block there).
+make testnet-run     # one engine cycle on testnet — verify it in the testnet UI
+make testnet-up      # then run it continuously for a few weeks (+ a web view on :8788)
+make testnet-logs    # watch it
+make testnet-down    # stop
 ```
+`make testnet-up` runs the live carry ENGINE on testnet in its own container + volume (it
+never touches the mainnet paper run), with a dashboard at **http://<server>:8788** whose
+**Reconcile** panel is your green-light: when *ours* and *exchange* agree (✓), the
+accounting is correct. Validates the **fixed-asset** engine's signing/fills/accounting
+(auto-rotation stays paper for now). Caveat again: testnet **economics ≠ mainnet** — this
+proves the plumbing, not the P&L.
 `BASIS_HL_TESTNET=1` routes market data, account state, **and** the signer to
 `hyperliquid-testnet.xyz` so the run is self-consistent. Caveat: testnet **funding and
 liquidity ≠ mainnet**, so the *economics* won't match real carry — but the **accounting
