@@ -11,7 +11,7 @@ Run:  python3 -m btcvol.analyze
 import csv
 import statistics
 
-from .core import fmt_pct, fmt_vol, DATA_DIR
+from .core import fmt_pct, fmt_vol, DATA_DIR, pearson
 
 CSV_PATH = DATA_DIR / "timeseries.csv"
 MIN_CORR_N = 20
@@ -50,19 +50,6 @@ def column_stats(vals):
 def pct_true(vals, pred):
     v = [x for x in vals if x is not None]
     return (sum(1 for x in v if pred(x)) / len(v) * 100) if v else None
-
-
-def pearson(xs, ys):
-    pairs = [(x, y) for x, y in zip(xs, ys) if x is not None and y is not None]
-    if len(pairs) < 3:
-        return None
-    xs2, ys2 = [p[0] for p in pairs], [p[1] for p in pairs]
-    if len(set(xs2)) < 2 or len(set(ys2)) < 2:
-        return None
-    mx, my = statistics.mean(xs2), statistics.mean(ys2)
-    num = sum((x - mx) * (y - my) for x, y in pairs)
-    den = (sum((x - mx) ** 2 for x in xs2) * sum((y - my) ** 2 for y in ys2)) ** 0.5
-    return num / den if den else None
 
 
 def main():

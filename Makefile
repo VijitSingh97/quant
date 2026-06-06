@@ -1,6 +1,6 @@
 PY := PYTHONPATH=src python3
 
-.PHONY: help install dev test dashboard monitor carry vrp condor-bt structures skew book analyze log launchd-install launchd-uninstall clean
+.PHONY: help install dev test dashboard monitor carry vrp combined condor-bt structures skew book analyze log launchd-install launchd-uninstall clean
 
 help:
 	@echo "make install            editable install (pip install -e .)"
@@ -11,6 +11,7 @@ help:
 	@echo "make carry [YEARS=2]    funding-carry backtest"
 	@echo "make vrp                vol-risk-premium backtest"
 	@echo "make condor-bt          backtest the monthly condor-selling rule"
+	@echo "make combined           combined carry + filtered-condor book backtest"
 	@echo "make structures         defined-risk option structures vs live chain"
 	@echo "make skew               read the live implied-vol surface / skew"
 	@echo "make book               delta-neutral book monitor (net-delta drift)"
@@ -42,6 +43,9 @@ vrp:
 
 condor-bt:
 	$(PY) -m btcvol.backtests.structures
+
+combined:
+	$(PY) -m btcvol.backtests.combined
 
 structures:
 	$(PY) -m btcvol.structures

@@ -94,8 +94,9 @@ def _print_summary(s, risk):
     print(f"  equity curve     {sparkline(s['equity'])}")
 
 
-def run(delta=0.20, wing_pct=0.08, risk=0.20, grid=1000.0, skew=False):
-    # Optional: apply today's fitted skew shape to historical ATM DVOL (vs flat vol).
+def simulate(delta=0.20, wing_pct=0.08, grid=1000.0, skew=False):
+    """Run the non-overlapping condor rolls. Returns dict(detail, always, filtered,
+    dates, skew, skew_note) — reused by run() (printing) and the combined-book backtest."""
     iv_fn, skew_note = None, "flat vol"
     if skew:
         from ..core.surface import build_surface, fit_skew, skew_iv
@@ -117,8 +118,7 @@ def run(delta=0.20, wing_pct=0.08, risk=0.20, grid=1000.0, skew=False):
     IV = [iv_by_date[d] for d in dates]
     T = HOLD / YEAR
 
-    detail = []
-    always, filtered = [], []
+    detail, always, filtered = [], [], []
     i = 0
     while i + HOLD < len(S):
         st0, iv0, d0 = S[i], IV[i], dates[i]
@@ -132,13 +132,20 @@ def run(delta=0.20, wing_pct=0.08, risk=0.20, grid=1000.0, skew=False):
                "credit": c["credit"], "credit_flat": credit_flat,
                "max_loss": c["max_loss"], "pnl": pnl, "ror": ror}
         detail.append(row)
-
         always.append({**row, "active": True})
         sell = rv_trail is None or iv0 > rv_trail        # DVOL>RV filter (sell when rich)
         filtered.append({**row, "active": sell, "ror": ror if sell else 0.0,
                          "pnl": pnl if sell else 0.0})
         i += HOLD
 
+    return {"detail": detail, "always": always, "filtered": filtered,
+            "dates": dates, "skew": skew, "skew_note": skew_note}
+
+
+def run(delta=0.20, wing_pct=0.08, risk=0.20, grid=1000.0, skew=False):
+    sim = simulate(delta, wing_pct, grid, skew)
+    detail, always, filtered = sim["detail"], sim["always"], sim["filtered"]
+    dates, skew_note = sim["dates"], sim["skew_note"]
     bar = "=" * 78
     print(f"\n{bar}\nCONDOR-SELLING RULE BACKTEST  (roll 30d iron condor, ~{delta:.0%} short Δ, "
           f"{wing_pct:.0%} wings)\n{bar}")
