@@ -96,6 +96,26 @@ The logger writes each asset to its own `data/<asset>_timeseries.csv` (BTC stays
 
 ---
 
+## Live execution (paper-first) — see [README_live.md](README_live.md)
+
+The research above feeds a safety-first execution layer (`btcvol.live`) that runs the
+carry strategy in **paper mode by default** — live prices, simulated fills, full audit
+trail, no API keys, no real money. Order placement is gated until you opt into live.
+
+```bash
+make live-paper      # one reconcile cycle (fixed asset)        [btcvol-live]
+make live-auto       # auto-select best persistent-carry asset  [btcvol-live-auto]
+make live-monitor    # CLI book status + carry opportunities    [btcvol-live-monitor]
+make live-web        # web dashboard -> localhost:8787          [btcvol-live-web]
+make carry-scan      # rank all perps by persistent funding     [btcvol-carry-scan]
+```
+
+Risk gate (USD limits + kill switch), SQLite audit store, read-only-first Hyperliquid
+client, and an auto allocator with a liquidity floor + spot-able universe + hysteresis.
+Full details, the phased path to live, and the API-key posture are in **README_live.md**.
+
+---
+
 ## Project layout
 
 ```
@@ -114,6 +134,7 @@ quant/
 │   ├── analyze.py            analyze our own captured timeseries.csv
 │   ├── macro.py              cross-asset VRP (equities/commodities via Yahoo)
 │   ├── backfill.py           historical skew from Tardis free monthly snapshots
+│   ├── carryscan.py          cross-asset/venue carry scanner (persistent funding)
 │   ├── logger.py             compact CSV time-series logger (launchd target)
 │   ├── backtests/
 │   │   ├── carry.py          funding-carry backtest
@@ -122,7 +143,7 @@ quant/
 │   │   ├── combined.py       carry + filtered-condor combined-book backtest
 │   │   ├── robustness.py     param sweep / walk-forward / cost anti-overfit checks
 │   │   └── histskew.py       historical-skew condor backtest on our logged data (#6)
-│   └── core/                 shared layer (no presentation)
+│   ├── core/                 shared layer (no presentation)
 │       ├── http.py           keyless REST helpers
 │       ├── stats.py          vol math: cc/parkinson vol, sharpe, drawdown
 │       ├── blackscholes.py   BS pricing, delta, strike-from-delta, prob/EV
@@ -132,6 +153,17 @@ quant/
 │       ├── format.py         fmt_pct / fmt_vol / sparkline
 │       ├── sources.py        all exchange data pulls (asset-parameterized)
 │       └── paths.py          project-root-anchored data dir
+│   └── live/                 EXECUTION layer (paper-first) — see README_live.md
+│       ├── config.py         mode/venue/asset + USD risk limits (env-driven)
+│       ├── store.py          SQLite audit store (events/orders/fills/positions/pnl/meta)
+│       ├── risk.py           pre-trade gate + kill switch
+│       ├── allocator.py      delta-neutral carry target
+│       ├── selector.py       auto asset-selection (persistent funding + hysteresis)
+│       ├── engine.py         fixed-asset reconcile engine
+│       ├── auto.py           auto-rotating allocator
+│       ├── status.py         shared status (CLI + web)
+│       ├── monitor.py · web.py · dashboard.html   CLI + web tracker
+│       └── exchanges/        base · paper (sim) · hyperliquid (read-only-first)
 ├── scripts/
 │   ├── run_logger.sh         what launchd actually executes
 │   ├── install_launchd.sh    render plist + load the agent
@@ -195,8 +227,14 @@ strategies can be backtested on live-captured funding/IV, not just vendor histor
 make test         # or: PYTHONPATH=src python3 -m pytest -q
 ```
 
-Tests cover the pure functions (vol math, Sharpe, drawdown, formatting) and run
-offline — no network calls.
+**114 tests, fully offline** (no network — the suite runs in ~0.1s). Coverage spans the
+pure logic: vol math / Sharpe / drawdown / Pearson, Black-Scholes + greeks + strike-from-
+delta, the IV-surface smile/skew fit, position sizing, the asset registry, the backtest
+factor math, the auto-selector hysteresis, and the audit store. The simulated execution
+path (paper-exchange fills, funding accrual, the reconcile loop's delta-neutral
+convergence, and the auto allocator's flatten) is tested via a fixed-mark exchange so it
+runs without hitting any venue. Network sources (`core/sources`, `core/http`) and pure
+display/orchestration (web, monitor, scanners) are deliberately not unit-tested.
 
 ---
 

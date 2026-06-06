@@ -14,9 +14,13 @@ and no API keys required** to start.
 
 ```bash
 make live-paper      # one reconcile cycle: read market -> target -> simulate fills -> audit
+make live-auto       # auto-select the best persistent-carry asset and rotate (paper)
 make live-monitor    # CLI status (positions, net delta, equity, funding) + audit trail
 make live-web        # web dashboard -> http://localhost:8787
 ```
+
+Each `make X` == `PYTHONPATH=src python3 -m btcvol.live.X` == the console script
+`btcvol-live[-X]` after `pip install -e .` (e.g. `btcvol-live-auto`, `btcvol-live-web`).
 
 Run `live-paper` repeatedly (or scheduled) — it converges to the delta-neutral carry
 (long spot / short perp), stays funding-timed (flat when funding < 0), and accrues
