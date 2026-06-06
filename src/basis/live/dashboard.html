@@ -35,6 +35,14 @@
   td{padding:4px 0;border-bottom:1px solid var(--line)} td:last-child{text-align:right}
   .pos{color:var(--grn)} .neg{color:var(--red)} .neu{color:var(--blue)} .amb{color:var(--amb)}
   a{color:var(--blue);text-decoration:none} a:hover{text-decoration:underline}
+  .help{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;
+    border:1px solid var(--mut);color:var(--mut);border-radius:50%;font-size:10px;font-weight:700;
+    margin-left:6px;cursor:help;position:relative;vertical-align:middle;text-transform:none;letter-spacing:0}
+  .help:hover{color:var(--fg);border-color:var(--fg)}
+  .help:hover::after{content:attr(data-tip);position:absolute;left:50%;transform:translateX(-50%);
+    top:165%;width:230px;background:#0d1119;border:1px solid var(--line);border-radius:8px;
+    padding:9px 11px;font-size:12px;font-weight:400;line-height:1.45;color:var(--fg);
+    text-transform:none;letter-spacing:normal;white-space:normal;z-index:60;box-shadow:0 8px 24px rgba(0,0,0,.55)}
   .log{background:#0d1119;border:1px solid var(--line);border-radius:12px;padding:10px;
     max-height:240px;overflow:auto;font-family:ui-monospace,Menlo,monospace;font-size:12px}
   .log div{padding:2px 0;color:var(--mut)} .log b{color:var(--fg)}
@@ -59,51 +67,52 @@
       <span id="posPair">—</span>
       <span class="psep">·</span><span id="posLegs" class="mut">—</span>
       <span class="psep">·</span><span id="posLev">—</span>
+      <span class="help" data-tip="What the engine is doing right now — DEPLOYED (long spot + short perp, delta-neutral), FLAT (in cash), WINDING DOWN, or HALTED — with the pair, leverage and net delta. Green = deployed & neutral, amber = flat, red = halted.">?</span>
     </div>
   </div>
 
   <!-- ===================== YOUR BOOK ===================== -->
-  <div class="section">Your book</div>
+  <div class="section">Your book<span class="help" data-tip="Your account: current position, P&L and performance since this book started.">?</span></div>
   <div class="grid">
-    <div class="card"><h3>Equity</h3><div id="equity" class="big">—</div><div id="equitySub" class="sub">net of fees</div></div>
-    <div class="card"><h3>Total return</h3><div id="ret" class="big">—</div><div id="retSub" class="sub">since inception</div></div>
-    <div class="card"><h3>APR</h3><div id="aprBig" class="big">—</div><div class="sub">annualized</div></div>
-    <div class="card"><h3>Funding earned</h3><div id="funding" class="big">—</div><div class="sub">accrued</div></div>
-    <div class="card"><h3>Fees paid</h3><div id="feesBig" class="big">—</div><div class="sub">trading cost</div></div>
-    <div class="card"><h3>Net delta</h3><div id="delta" class="big">—</div><div id="deltaSub" class="sub">—</div></div>
+    <div class="card"><h3>Equity<span class="help" data-tip="Your paper account value, marked to market and net of trading fees.">?</span></h3><div id="equity" class="big">—</div><div id="equitySub" class="sub">net of fees</div></div>
+    <div class="card"><h3>Total return<span class="help" data-tip="Equity change since this book started, net of fees.">?</span></h3><div id="ret" class="big">—</div><div id="retSub" class="sub">since inception</div></div>
+    <div class="card"><h3>APR<span class="help" data-tip="Total return annualized — the per-year pace. Very noisy early; ignore until a few weeks in.">?</span></h3><div id="aprBig" class="big">—</div><div class="sub">annualized</div></div>
+    <div class="card"><h3>Funding earned<span class="help" data-tip="Cumulative funding the short perp has collected — this is the carry income.">?</span></h3><div id="funding" class="big">—</div><div class="sub">accrued</div></div>
+    <div class="card"><h3>Fees paid<span class="help r" data-tip="Cumulative taker fees + slippage paid on fills (the cost of trading).">?</span></h3><div id="feesBig" class="big">—</div><div class="sub">trading cost</div></div>
+    <div class="card"><h3>Net delta<span class="help r" data-tip="Price exposure. ~0 means the long spot and short perp cancel out — you don't care which way price moves.">?</span></h3><div id="delta" class="big">—</div><div id="deltaSub" class="sub">—</div></div>
   </div>
 
   <div class="row2">
     <div class="card">
-      <h3>Carry book — target vs actual</h3>
+      <h3>Carry book — target vs actual<span class="help" data-tip="What the engine wants to hold (target) vs what it holds (actual), plus cash, funding earned and fees.">?</span></h3>
       <table id="book"></table>
     </div>
     <div class="card">
-      <h3>Equity curve (net of fees)</h3>
+      <h3>Equity curve (net of fees)<span class="help r" data-tip="Your equity over time. Delta-neutral, so it should grind up with funding — not swing with the coin's price.">?</span></h3>
       <svg id="spark" viewBox="0 0 300 64" preserveAspectRatio="none"></svg>
       <div class="sub" id="sparkSub">—</div>
     </div>
   </div>
 
   <div class="card" id="perfCard" style="margin-bottom:12px">
-    <h3>Performance — since inception</h3>
+    <h3>Performance — since inception<span class="help" data-tip="Period scorecard: return, risk-adjusted return (Sharpe), worst peak-to-trough drawdown, how long it's run, and how often it traded.">?</span></h3>
     <table id="perf"></table>
   </div>
 
   <div class="card" id="liveCard" style="margin-bottom:12px;display:none">
-    <h3>Live account (read-only)</h3>
+    <h3>Live account (read-only)<span class="help" data-tip="Your real Hyperliquid account, read-only (shown when BASIS_HL_ADDRESS is set). No keys, no trading — just visibility.">?</span></h3>
     <table id="liveAcct"></table>
   </div>
 
   <!-- ===================== STRATEGY ===================== -->
-  <div class="section">Strategy</div>
+  <div class="section">Strategy<span class="help" data-tip="How the engine decides what to trade, and how it checks itself.">?</span></div>
   <div class="card" style="margin-bottom:12px">
-    <h3>Deployment</h3>
+    <h3>Deployment<span class="help" data-tip="Which asset the carry is on, its funding now vs its 14-day average, and whether a richer (spot-able) market exists.">?</span></h3>
     <div id="trading" class="sub">—</div>
   </div>
 
   <div class="card" style="margin-bottom:12px">
-    <h3>Self-validation — weekly rotation re-check (suggests, never auto-applies)</h3>
+    <h3>Self-validation — weekly rotation re-check (suggests, never auto-applies)<span class="help" data-tip="A weekly back-test of the current settings on recent data, checked out-of-sample (walk-forward). It suggests changes but never applies them — you approve via basis-tune.">?</span></h3>
     <div id="valState" class="sub" style="margin-bottom:8px">—</div>
     <table id="valTable"></table>
     <div class="sub" style="margin-top:10px">Export ·
@@ -115,26 +124,26 @@
   </div>
 
   <div class="card" style="margin-bottom:12px">
-    <h3>Recent activity (audit trail)</h3>
+    <h3>Recent activity (audit trail)<span class="help" data-tip="Append-only log of everything the engine did: signals, order intents, risk blocks, fills, rotations.">?</span></h3>
     <div id="log" class="log"></div>
   </div>
 
   <!-- ===================== MARKET & SYSTEM ===================== -->
-  <div class="section">Market &amp; system</div>
+  <div class="section">Market &amp; system<span class="help" data-tip="Generic market data and the system's configuration — not specific to your book.">?</span></div>
   <div class="grid">
-    <div class="card"><h3>Mark</h3><div id="mark" class="big">—</div><div id="markSub" class="sub">—</div></div>
-    <div class="card"><h3>Funding rate</h3><div id="fr" class="big">—</div><div id="carry" class="sub">—</div></div>
-    <div class="card"><h3>DVOL (implied)</h3><div id="dvol" class="big">—</div><div class="sub">Deribit 30d IV</div></div>
-    <div class="card"><h3>Cost / leg</h3><div id="cost" class="big">—</div><div class="sub">taker + slippage</div></div>
+    <div class="card"><h3>Mark<span class="help" data-tip="Current perpetual price of the deployed asset on Hyperliquid.">?</span></h3><div id="mark" class="big">—</div><div id="markSub" class="sub">—</div></div>
+    <div class="card"><h3>Funding rate<span class="help" data-tip="The perp's funding, annualized. Positive = shorts get paid (good for the carry). The engine sits in cash when it's negative.">?</span></h3><div id="fr" class="big">—</div><div id="carry" class="sub">—</div></div>
+    <div class="card"><h3>DVOL (implied)<span class="help r" data-tip="Deribit's 30-day implied-volatility index — how much the options market expects price to move.">?</span></h3><div id="dvol" class="big">—</div><div class="sub">Deribit 30d IV</div></div>
+    <div class="card"><h3>Cost / leg<span class="help r" data-tip="Assumed taker fee + slippage charged on every fill, so the paper P&L is realistic (not free).">?</span></h3><div id="cost" class="big">—</div><div class="sub">taker + slippage</div></div>
   </div>
 
   <div class="card" style="margin-bottom:12px">
-    <h3>Carry opportunities — all perps, ranked by persistent (14d) funding</h3>
+    <h3>Carry opportunities — all perps, ranked by persistent (14d) funding<span class="help" data-tip="Every liquid perp ranked by persistent (14-day-average) funding — where the carry is richest. The highlighted row is what's deployed.">?</span></h3>
     <table id="opps"></table>
   </div>
 
   <div class="card" style="margin-bottom:12px">
-    <h3>System &amp; risk limits</h3>
+    <h3>System &amp; risk limits<span class="help" data-tip="Mode (paper/live), the funding-timing/deploy settings, and the hard caps every order must pass (size, notional, leverage) plus the kill switch.">?</span></h3>
     <table id="sys"></table>
   </div>
 

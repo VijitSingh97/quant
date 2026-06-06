@@ -139,8 +139,9 @@ from *your book* to generic *market/system* data, auto-refreshing every 5s:
 - **Market & system** — mark, funding rate, DVOL, cost/leg; the **carry-opportunities**
   table (all perps by persistent funding); and a **system & risk-limits** table.
 
-The CLI (`make live-monitor`) shows the same POSITION block in text; `make report` /
-`make report-auto` print the period performance scorecard.
+Every section header and metric has a hoverable **?** with a plain-English explanation,
+so the dashboard is self-documenting. The CLI (`make live-monitor`) shows the same
+POSITION block in text; `make report` / `make report-auto` print the period scorecard.
 
 ## Deploy on a home server (Docker) — recommended
 
