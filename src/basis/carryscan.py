@@ -33,6 +33,18 @@ def _tier(oi):
     return "deep" if oi >= 100e6 else "good" if oi >= 30e6 else "ok"
 
 
+def cross_venue(coin, hl_apr, others):
+    """Pure: the cross-venue funding view for one coin — {venue: apr}, best/worst, spread.
+    The spread is the perp-vs-perp arb edge (short best-funding venue, long worst)."""
+    cross = {"HL": hl_apr}
+    for name, fund in others.items():
+        if coin in fund:
+            cross[name] = fund[coin]
+    best_v, worst_v = max(cross, key=cross.get), min(cross, key=cross.get)
+    return {"cross": cross, "best_v": best_v, "best": cross[best_v], "worst_v": worst_v,
+            "spread": cross[best_v] - cross[worst_v] if len(cross) > 1 else 0.0}
+
+
 def run(min_oi_musd=10.0, top=15, days=14):
     hl = safe("Hyperliquid", hl_all_funding) or {}
     other = {name: (safe(name, fn) or {}) for name, fn in VENUES.items()}
@@ -45,16 +57,8 @@ def run(min_oi_musd=10.0, top=15, days=14):
     rows = []
     for coin, d in cands:
         st = safe(coin, lambda c=coin: hl_funding_stats(c, days))
-        cross = {"HL": d["apr"]}
-        for name, fund in other.items():
-            if coin in fund:
-                cross[name] = fund[coin]
-        best_v = max(cross, key=cross.get)
-        worst_v = min(cross, key=cross.get)
-        rows.append({"coin": coin, "now": d["apr"], "oi": d["oi_usd"], "stats": st,
-                     "best_v": best_v, "best": cross[best_v], "worst_v": worst_v,
-                     "cross": cross,
-                     "spread": cross[best_v] - cross[worst_v] if len(cross) > 1 else 0.0})
+        cv = cross_venue(coin, d["apr"], other)
+        rows.append({"coin": coin, "now": d["apr"], "oi": d["oi_usd"], "stats": st, **cv})
     rows.sort(key=lambda r: (r["stats"]["avg"] if r["stats"] else r["now"]), reverse=True)
 
     bar = "=" * 86

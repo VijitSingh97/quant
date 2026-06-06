@@ -59,7 +59,7 @@ A `Makefile` wraps the common commands: `make dashboard`, `make monitor`,
 | `basis.backtests.robustness` / `basis-robust` | **Anti-overfit checks**: parameter sweep (Δ × wing), walk-forward (in/out-of-sample), and fee-drag — reuses one market pull. Verdict flags whether the edge is broad or a knife-edge. Flags: `--risk`, `--fee-bps`, `--flat`. |
 | `basis.backtests.combined` / `basis-combined` | **Combines the two engines into one book**: funding carry (levered) + the skew-priced condor, over a common window. Defaults to the **strongest config** — VOV-gated condor + funding-timed carry. Reports each leg vs combined (total/CAGR/Sharpe/maxDD) and the leg correlation. Flags: `--leverage`, `--risk`, `--vol-target`, `--no-vov`, `--no-timed`. |
 | `basis.backfill` / `basis-backfill` | **Backfills historical IV-surface skew** from Tardis.dev free monthly Deribit option-chain snapshots (back to 2020) → `data/skew_history.csv`. Gives real historical RR/BF *now* instead of waiting on the logger. `--asset`, `--start`. |
-| `basis.backtests.structures --histskew` | Condor backtest priced with **real per-roll historical skew** (from the Tardis backfill) vs the static fit — answers whether the static-skew approximation was biased. |
+| `basis.backtests.histskew` / `basis-histskew` · `basis.backtests.structures --histskew` | Condor backtest priced with **real per-roll historical skew** (from the Tardis backfill / our logged data) vs the static fit — answers whether the static-skew approximation was biased (issue #6). |
 | `basis.backtests.structures` / `basis-condor-bt` | Backtests the **monthly defined-risk condor rule**: rolls a delta-based iron condor (synthetic credit @ historical DVOL, real price path for the payoff), compares sell-every-month vs a DVOL>RV filter, and shows the capped tail vs the naked book. Flags: `--delta`, `--wing-pct`, `--risk`. |
 | `basis.structures` / `basis-structures` | Builds **defined-risk** short-vol structures (iron condor, put/call credit spreads) from the live Deribit chain. Prices legs conservatively (sell at bid, buy wings at ask) and reports max loss, breakevens, probability of profit (BS under implied), expected value under realized, and an ASCII payoff diagram. Flags: `--dte`, `--delta`, `--wing`. |
 | `basis.skew` / `basis-skew` | Reads the live implied-vol **surface**: per-expiry ATM/25Δ vols, risk-reversal (RR25) and butterfly (BF25), the ATM term structure (contango/backwardation), an ASCII smile, and a fitted parametric skew shape that the condor backtest reuses. |
@@ -250,7 +250,7 @@ make test              # offline unit suite (default, ~0.1s)
 make test-integration  # opt-in: hit live venues and assert response shapes
 ```
 
-**161 tests, fully offline** (no network — the suite runs in ~0.3s). Coverage spans the
+**164 tests, fully offline** (no network — the suite runs in ~0.3s). Coverage spans the
 pure logic: vol math / Sharpe / drawdown / Pearson, Black-Scholes + greeks + strike-from-
 delta, the IV-surface smile/skew fit, position sizing, the asset registry, the backtest
 factor math (incl. the rotation `compute`/curve/alignment helpers), the auto-selector
@@ -264,7 +264,7 @@ scheduler's per-cycle failure isolation, the container healthcheck's exit codes,
 guard), the **fee model** (fees reduce equity + are tracked), the **regime study**
 helpers, the **guarded tuner** (bounds, apply, rollback, reset), and **live-readiness**
 (preflight checks + the live order **triple-gate**: blocked outside live, when unarmed,
-and when the kill switch is on) — all offline.
+and when the kill switch is on), and the **cross-venue** funding spread logic — all offline.
 
 **Integration suite (opt-in, `-m integration`)** — 14 live-venue *smoke* tests that hit
 the real endpoints (Hyperliquid, Coinbase, Deribit, OKX, Yahoo, Tardis, + the read-only
