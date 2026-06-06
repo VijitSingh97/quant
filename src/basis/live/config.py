@@ -24,6 +24,10 @@ def _f(name, default):
     return float(_env(name, default))
 
 
+def _i(name, default):
+    return int(float(_env(name, default)))
+
+
 # --- mode / venue (live requires a deliberate opt-in) ---
 MODE = _env("MODE", "paper").lower()                       # "paper" | "live"
 LIVE = MODE == "live"
@@ -56,9 +60,14 @@ AUTO_SPOT_ANY = _env("AUTO_SPOT_ANY", "0") == "1"
 AUTO_SPOT_UNIVERSE = {s for s in _env(
     "AUTO_SPOT_UNIVERSE", "BTC,ETH,SOL,HYPE").upper().split(",") if s}
 
+# --- scheduled self-validation (the `validate` cycle: re-check the rule on fresh data) ---
+VALIDATE_INTERVAL_SECONDS = _i("VALIDATE_INTERVAL_SECONDS", "604800")   # default weekly
+VALIDATE_DAYS = _i("VALIDATE_DAYS", "365")                              # history to backtest over
+
 # --- paths ---
 _db = _env("DB")
 DB_PATH = (DATA_DIR / _db) if _db else (DATA_DIR / ("live.db" if SYMBOL == "BTC" else f"live_{SYMBOL.lower()}.db"))
+RESEARCH_DB = DATA_DIR / "research.db"        # metrics timeseries + validation reports (all-in-DB)
 KILL_FILE = DATA_DIR / "KILL_SWITCH"          # presence halts ALL trading (any asset)
 
 

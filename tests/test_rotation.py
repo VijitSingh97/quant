@@ -31,3 +31,27 @@ def test_curve_stats_has_drawdown_and_sharpe():
     assert mdd < 0                                    # there is a peak-to-trough drop
     assert sharpe is not None                         # two distinct daily returns
     assert end < 1.0                                  # net down
+
+
+def _series(rates, n=400, step=3600000):
+    return {c: [(i * step, r) for i in range(n)] for c, r in rates.items()}
+
+
+def test_compute_prefers_higher_funding_asset():
+    series = _series({"BTC": 0.00001, "ALT": 0.00005})   # ALT pays ~5x
+    r = rotation.compute(series, window=2, cadence=24, min_funding=0.0, switch_margin=0.05)
+    assert r["ok"]
+    assert r["best_fixed"] == "ALT"
+    assert r["rotation"]["apr"] > 0
+    assert r["vs_btc_apr"] > 0                        # rotation beats a fixed BTC carry
+    assert r["rotation"]["switches"] >= 1
+
+
+def test_compute_insufficient_history():
+    r = rotation.compute(_series({"BTC": 0.0, "ALT": 0.0}, n=10), window=14)
+    assert not r["ok"] and "insufficient" in r["error"]
+
+
+def test_compute_needs_two_assets():
+    r = rotation.compute({"BTC": [(0, 0.0)]})
+    assert not r["ok"]

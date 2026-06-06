@@ -56,38 +56,12 @@ def _curve_stats(hourly):
     return lvl - 1, apr, sharpe(daily, DAYS), max_drawdown(eq), lvl
 
 
-def run(days=365, window=14, cadence=24, min_funding=0.05, switch_margin=0.05,
-        cost_bps=5.0, universe=("BTC", "ETH", "SOL", "HYPE")):
-    print(f"\nPulling HL funding history ({days}d) for {', '.join(universe)} …")
-    series = {}
-    for j, c in enumerate(universe):
-        if j:
-            time.sleep(1.0)              # be polite between assets
-        s = hl_funding_series(c, days)
-        if s:
-            series[c] = s
-            print(f"  {c:5} {len(s):>5} hourly points")
-        else:
-            print(f"  {c:5} no data — skipped")
-    if len(series) < 2:
-        print("Need ≥2 assets with data. Aborting.")
-        return
-
-    common, rates = _aligned(series)
-    N, n = window * 24, len(common)
-    if n <= N + cadence:
-        print(f"Only {n} aligned hours — need > {N + cadence}. Try a smaller --window.")
-        return
-    span_days = (common[-1] - common[0]) / 86400000
-    assets = list(rates)
-    print(f"\nCommon window: {n} hours (~{span_days:.0f} days), {len(assets)} assets, "
-          f"trailing {window}d, decide every {cadence}h, cost {cost_bps:.0f}bps/leg.\n")
-
-    # --- rotation sim over [N : n] (first N hours seed the trailing average) ---
-    # The switch cost is folded into that hour's return, so `rot` stays one entry
-    # per hour (clean APR / daily-Sharpe / drawdown).
-    held, switches, cost_frac = None, 0, cost_bps / 1e4
-    rot, holds, log = [], [], []
+def _rotate(rates, assets, common, N, n, cadence, min_funding, switch_margin, cost_frac):
+    """Run the REAL select_asset rule over [N:n]; the switch cost is folded into the
+    decision hour's return so the stream stays one entry/hour. Returns
+    (hourly_returns, holds, switches, switch_log)."""
+    held, switches, log = None, 0, []
+    hourly, holds = [], []
     for i in range(N, n):
         cost = 0.0
         if (i - N) % cadence == 0:
@@ -104,65 +78,114 @@ def run(days=365, window=14, cadence=24, min_funding=0.05, switch_margin=0.05,
                     switches += 1
                     log.append((i, reason))
                 held = choice
-        rot.append((rates[held][i] if held else 0.0) - cost)
+        hourly.append((rates[held][i] if held else 0.0) - cost)
         holds.append(1 if held else 0)
+    return hourly, holds, switches, log
 
-    # --- fixed-hold baselines over the same [N : n] window ---
+
+def pull_series(universe, days, pause=1.0, log_fn=None):
+    """Pull paginated HL funding history for each asset -> {coin: [(ts,rate)]}."""
+    series = {}
+    for j, c in enumerate(universe):
+        if j and pause:
+            time.sleep(pause)                          # be polite between assets
+        s = hl_funding_series(c, days)
+        if s:
+            series[c] = s
+        if log_fn:
+            log_fn(c, len(s) if s else 0)
+    return series
+
+
+def compute(series, window=14, cadence=24, min_funding=0.05, switch_margin=0.05, cost_bps=5.0):
+    """Pure (no network/printing): given funding series, return a structured result dict
+    comparing rotation (net of cost) to each fixed-hold baseline. Reused by the CLI and
+    the scheduled self-validation."""
+    if len(series) < 2:
+        return {"ok": False, "error": f"need ≥2 assets with data (got {len(series)})"}
+    common, rates = _aligned(series)
+    N, n = window * 24, len(common)
+    if n <= N + cadence:
+        return {"ok": False, "error": f"insufficient history: {n} aligned hours (need > {N + cadence})"}
+    assets = list(rates)
+    cost_frac = cost_bps / 1e4
+
+    net, holds, switches, log = _rotate(rates, assets, common, N, n, cadence,
+                                        min_funding, switch_margin, cost_frac)
+    gross, _, _, _ = _rotate(rates, assets, common, N, n, cadence, min_funding, switch_margin, 0.0)
+    tot, apr, sh, dd, _ = _curve_stats(net)
+    _, g_apr, _, _, _ = _curve_stats(gross)
+
+    fixed = {}
+    for c in assets:
+        ftot, fapr, fsh, fdd, _ = _curve_stats(rates[c][N:n])
+        fixed[c] = {"total": ftot, "apr": fapr, "sharpe": fsh, "maxdd": fdd}
+    best_fixed = max(fixed, key=lambda c: fixed[c]["apr"])
+    btc_apr = fixed.get("BTC", {}).get("apr")
+    span_days = (common[-1] - common[0]) / 86400000
+
+    return {
+        "ok": True, "window_days": window, "cadence_hours": cadence, "cost_bps": cost_bps,
+        "min_funding": min_funding, "switch_margin": switch_margin,
+        "assets": assets, "span_days": span_days, "n_hours": n,
+        "rotation": {"total": tot, "apr": apr, "sharpe": sh, "maxdd": dd, "switches": switches,
+                     "deployed_frac": sum(holds) / max(1, len(holds)),
+                     "gross_apr": g_apr, "cost_drag_apr": g_apr - apr},
+        "fixed": fixed, "best_fixed": best_fixed,
+        "vs_btc_apr": (apr - btc_apr) if btc_apr is not None else None,
+        "vs_best_apr": apr - fixed[best_fixed]["apr"],
+        "verdict": ("rotation beats a fixed BTC carry net of cost"
+                    if (btc_apr is not None and apr > btc_apr)
+                    else "rotation does not beat a fixed carry net of cost"),
+        "switch_log": [{"day": round((common[i] - common[N]) / 86400000), "reason": reason}
+                       for i, reason in log[:12]],
+    }
+
+
+def _pct(x):
+    return fmt_pct(x) if x is not None else "—"
+
+
+def run(days=365, window=14, cadence=24, min_funding=0.05, switch_margin=0.05,
+        cost_bps=5.0, universe=("BTC", "ETH", "SOL", "HYPE")):
+    print(f"\nPulling HL funding history ({days}d) for {', '.join(universe)} …")
+    series = pull_series(universe, days,
+                         log_fn=lambda c, k: print(f"  {c:5} {k:>5} hourly points" if k else f"  {c:5} no data"))
+    r = compute(series, window=window, cadence=cadence, min_funding=min_funding,
+                switch_margin=switch_margin, cost_bps=cost_bps)
+    if not r.get("ok"):
+        print(f"\nCannot run: {r['error']}")
+        return
+
+    rot, fixed = r["rotation"], r["fixed"]
+    print(f"\nCommon window: {r['n_hours']} hours (~{r['span_days']:.0f} days), {len(r['assets'])} assets, "
+          f"trailing {window}d, decide every {cadence}h, cost {cost_bps:.0f}bps/leg.\n")
+    def _sh(v):
+        return f"{v:.2f}" if v else "—"
+
     print(f"{'strategy':22} {'total':>9} {'APR':>9} {'Sharpe':>7} {'maxDD':>8}")
     print("  " + "-" * 56)
-    results = {}
-    for c in assets:
-        results[c] = _curve_stats(rates[c][N:n])
-    rot_stats = _curve_stats(rot)
+    for c in sorted(fixed, key=lambda c: fixed[c]["apr"], reverse=True):
+        f = fixed[c]
+        print(f"{'fixed ' + c:22} {_pct(f['total']):>9} {_pct(f['apr']):>9} "
+              f"{_sh(f['sharpe']):>7} {_pct(f['maxdd']):>8}")
+    print(f"{'ROTATION (net cost)':22} {_pct(rot['total']):>9} {_pct(rot['apr']):>9} "
+          f"{_sh(rot['sharpe']):>7} {_pct(rot['maxdd']):>8}")
 
-    # baselines first (sorted by APR), then rotation
-    for c, st in sorted(results.items(), key=lambda kv: kv[1][1], reverse=True):
-        tot, apr, sh, dd, _ = st
-        tag = "fixed " + c
-        print(f"{tag:22} {fmt_pct(tot):>9} {fmt_pct(apr):>9} "
-              f"{(f'{sh:.2f}' if sh else '—'):>7} {fmt_pct(dd):>8}")
-    tot, apr, sh, dd, _ = rot_stats
-    print(f"{'ROTATION (net cost)':22} {fmt_pct(tot):>9} {fmt_pct(apr):>9} "
-          f"{(f'{sh:.2f}' if sh else '—'):>7} {fmt_pct(dd):>8}")
-
-    # gross (no-cost) rotation to isolate cost drag — same path, costs removed
-    held2, gros = None, []
-    for i in range(N, n):
-        if (i - N) % cadence == 0:
-            opps = [{"coin": c, "avg_apr": statistics.mean(rates[c][i - N:i]) * HOURS_Y,
-                     "oi_usd": 1e12, "pos_frac": None} for c in assets]
-            held_avg = next((o["avg_apr"] for o in opps if o["coin"] == held2), None)
-            choice, _ = select_asset(opps, held2, held_avg, spot_any=True,
-                                     min_funding=min_funding, oi_floor=0,
-                                     switch_margin=switch_margin, exit_funding=0.0)
-            held2 = choice
-        gros.append(rates[held2][i] if held2 else 0.0)
-    g_tot, g_apr, _, _, _ = _curve_stats(gros)
-
-    # --- verdict ---
-    best_fixed = max(results.items(), key=lambda kv: kv[1][1])
-    btc = results.get("BTC")
-    deployed_frac = sum(holds) / max(1, len(holds))
     print("\n" + "=" * 58)
-    print(f"  rotations: {switches}  (~1 per {span_days / max(1, switches):.0f} days)   "
-          f"deployed {deployed_frac*100:.0f}% of the time")
-    print(f"  cost drag: {fmt_pct(g_tot - tot)} of total return ({fmt_pct(g_apr)} APR gross "
-          f"-> {fmt_pct(apr)} net)")
-    if btc:
-        d = apr - btc[1]
-        print(f"  vs fixed BTC: {fmt_pct(d)} APR ({'BEATS' if d > 0 else 'LOSES TO'} a static BTC carry)")
-    d2 = apr - best_fixed[1][1]
-    print(f"  vs best fixed ({best_fixed[0]}): {fmt_pct(d2)} APR "
-          f"({'beats the ex-post winner' if d2 > 0 else 'below the ex-post best single asset'})")
-    verdict = ("ROTATION WINS net of costs" if (btc and apr > btc[1])
-               else "rotation does NOT beat a fixed carry net of costs")
-    print(f"  VERDICT: {verdict}.")
+    print(f"  rotations: {rot['switches']}  (~1 per {r['span_days'] / max(1, rot['switches']):.0f} days)   "
+          f"deployed {rot['deployed_frac']*100:.0f}% of the time")
+    print(f"  cost drag: {_pct(rot['cost_drag_apr'])} APR ({_pct(rot['gross_apr'])} gross -> {_pct(rot['apr'])} net)")
+    if r["vs_btc_apr"] is not None:
+        print(f"  vs fixed BTC: {_pct(r['vs_btc_apr'])} APR "
+              f"({'BEATS' if r['vs_btc_apr'] > 0 else 'LOSES TO'} a static BTC carry)")
+    print(f"  vs best fixed ({r['best_fixed']}): {_pct(r['vs_best_apr'])} APR")
+    print(f"  VERDICT: {r['verdict']}.")
     print("=" * 58)
-    if log:
+    if r["switch_log"]:
         print("\n  switch log (first 12):")
-        for i, reason in log[:12]:
-            day = (common[i] - common[N]) / 86400000
-            print(f"    d{day:>4.0f}  {reason}")
+        for e in r["switch_log"]:
+            print(f"    d{e['day']:>4}  {e['reason']}")
 
 
 def main():

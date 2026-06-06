@@ -8,8 +8,9 @@ unless-stopped` (the loop just resumes on boot); crash durability by SQLite WAL.
 
 Env (BASIS_* with legacy BTCVOL_* fallback):
   BASIS_CYCLE_SECONDS   seconds between cycles            (default 3600)
-  BASIS_TASKS           comma list of cycles to run       (default "logger,paper,auto")
-                        valid: logger, paper, auto
+  BASIS_TASKS           comma list of cycles to run       (default "logger,paper,auto,validate")
+                        valid: logger, paper, auto, validate
+                        (validate self-throttles to BASIS_VALIDATE_INTERVAL_SECONDS, weekly)
 Run:  python -m basis.live.scheduler
 """
 
@@ -38,8 +39,10 @@ def _load(name):
         from .engine import main as fn
     elif name == "auto":
         from .auto import main as fn
+    elif name == "validate":
+        from .validate import main as fn
     else:
-        raise ValueError(f"unknown task '{name}' (valid: logger, paper, auto)")
+        raise ValueError(f"unknown task '{name}' (valid: logger, paper, auto, validate)")
     return fn
 
 
@@ -72,7 +75,7 @@ def _sleep_until_next(seconds):
 
 def main():
     interval = int(config._env("CYCLE_SECONDS", "3600"))
-    tasks = [t.strip() for t in config._env("TASKS", "logger,paper,auto").split(",") if t.strip()]
+    tasks = [t.strip() for t in config._env("TASKS", "logger,paper,auto,validate").split(",") if t.strip()]
     signal.signal(signal.SIGTERM, _handle_signal)
     signal.signal(signal.SIGINT, _handle_signal)
     print(f"[scheduler] starting — tasks={tasks} interval={interval}s\n  {config.summary()}", flush=True)

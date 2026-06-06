@@ -110,6 +110,8 @@ make live-auto       # auto-select best persistent-carry asset  [basis-live-auto
 make live-monitor    # CLI book status + carry opportunities    [basis-live-monitor]
 make live-web        # web dashboard -> localhost:8787          [basis-live-web]
 make carry-scan      # rank all perps by persistent funding     [basis-carry-scan]
+make rotation        # backtest rotation vs fixed, net of cost  [basis-rotation]
+make validate        # self-validation report -> research.db    [basis-validate]
 ```
 
 Risk gate (USD limits + kill switch), SQLite audit store, read-only-first Hyperliquid
@@ -173,6 +175,7 @@ quant/
 │       ├── selector.py       auto asset-selection (persistent funding + hysteresis)
 │       ├── engine.py         fixed-asset reconcile engine
 │       ├── auto.py           auto-rotating allocator
+│       ├── validate.py       scheduled self-validation (re-check rule weekly, suggest)
 │       ├── scheduler.py      supervisor loop (container) — runs cycles, self-heals
 │       ├── healthcheck.py    container HEALTHCHECK (heartbeat freshness)
 │       ├── status.py         shared status (CLI + web)
@@ -241,16 +244,18 @@ make test              # offline unit suite (default, ~0.1s)
 make test-integration  # opt-in: hit live venues and assert response shapes
 ```
 
-**134 tests, fully offline** (no network — the suite runs in ~0.2s). Coverage spans the
+**141 tests, fully offline** (no network — the suite runs in ~0.2s). Coverage spans the
 pure logic: vol math / Sharpe / drawdown / Pearson, Black-Scholes + greeks + strike-from-
 delta, the IV-surface smile/skew fit, position sizing, the asset registry, the backtest
-factor math (incl. the rotation curve/alignment helpers), the auto-selector hysteresis,
-and the audit store. The simulated execution path (paper-exchange fills, funding accrual,
-the reconcile loop's delta-neutral convergence, and the auto allocator's flatten) is
-tested via a fixed-mark exchange. The **deployment/resilience layer** is covered too: the
-HTTP retry/backoff (retries transient errors, fast-fails geo-blocks), SQLite WAL mode,
-the `BASIS_DATA_DIR` override, the scheduler's per-cycle failure isolation, and the
-container healthcheck's exit codes — all without touching the network.
+factor math (incl. the rotation `compute`/curve/alignment helpers), the auto-selector
+hysteresis, and the audit store (incl. the reports/metrics tables). The simulated
+execution path (paper-exchange fills, funding accrual, the reconcile loop's delta-neutral
+convergence, and the auto allocator's flatten) is tested via a fixed-mark exchange. The
+**deployment/resilience layer** is covered too: the HTTP retry/backoff (retries transient
+errors, fast-fails geo-blocks), SQLite WAL mode, the `BASIS_DATA_DIR` override, the
+scheduler's per-cycle failure isolation, the container healthcheck's exit codes, and the
+**self-validation** (mocked-funding report shape, due/throttle logic, report storage) —
+all without touching the network.
 
 **Integration suite (opt-in, `-m integration`)** — 14 live-venue *smoke* tests that hit
 the real endpoints (Hyperliquid, Coinbase, Deribit, OKX, Yahoo, Tardis, + the read-only
@@ -308,8 +313,12 @@ keep [#4](https://github.com/VijitSingh97/quant/issues/4) accumulating before si
 ## Roadmap
 
 The roadmap is tracked in **[GitHub Issues](https://github.com/VijitSingh97/quant/issues)** —
-completed work is closed there (each feature commit references its issue). All build-able
-items are done; the two open issues are now **data-gated, not code-gated**:
+completed work is closed there (each feature commit references its issue).
 
+Data-gated (built, waiting on accumulated history):
 - [#4](https://github.com/VijitSingh97/quant/issues/4) — data-accumulation tracker (always-on; do not close)
 - [#6](https://github.com/VijitSingh97/quant/issues/6) — historical-skew condor backtest: the tool (`basis.backtests.histskew`) is **built and tested**; it degrades gracefully until the logger has a few months of skew history, then prints logged-skew vs static-skew side by side.
+
+Researched / scoped (the bigger next steps):
+- [#17](https://github.com/VijitSingh97/quant/issues/17) — **regime-based strategy switch** (allocate carry vs defined-risk vol by regime; needs a live options-execution path first).
+- [#18](https://github.com/VijitSingh97/quant/issues/18) — **guarded parameter auto-tuner** (walk-forward + human approval) building on the scheduled self-validation.

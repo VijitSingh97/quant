@@ -18,7 +18,8 @@ services:
     environment:
       BASIS_MODE: ${BASIS_MODE:-paper}            # paper unless you deliberately set live
       BASIS_CYCLE_SECONDS: ${BASIS_CYCLE_SECONDS:-3600}
-      BASIS_TASKS: ${BASIS_TASKS:-logger,paper,auto}
+      BASIS_TASKS: ${BASIS_TASKS:-logger,paper,auto,validate}
+      BASIS_VALIDATE_INTERVAL_SECONDS: ${BASIS_VALIDATE_INTERVAL_SECONDS:-604800}  # weekly
     volumes:
       - basis-data:/app/data
     # healthcheck is defined in the image (HEALTHCHECK)

@@ -30,7 +30,8 @@
   .row2{display:grid;grid-template-columns:1.2fr 1fr;gap:12px}
   table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
   td{padding:4px 0;border-bottom:1px solid var(--line)} td:last-child{text-align:right}
-  .pos{color:var(--grn)} .neg{color:var(--red)} .neu{color:var(--blue)}
+  .pos{color:var(--grn)} .neg{color:var(--red)} .neu{color:var(--blue)} .amb{color:var(--amb)}
+  a{color:var(--blue);text-decoration:none} a:hover{text-decoration:underline}
   .log{background:#0d1119;border:1px solid var(--line);border-radius:12px;padding:10px;
     max-height:240px;overflow:auto;font-family:ui-monospace,Menlo,monospace;font-size:12px}
   .log div{padding:2px 0;color:var(--mut)} .log b{color:var(--fg)}
@@ -79,6 +80,18 @@
     <h3>Carry opportunities — all perps, ranked by persistent (14d) funding</h3>
     <div id="trading" class="sub" style="margin-bottom:8px">—</div>
     <table id="opps"></table>
+  </div>
+
+  <div class="card" style="margin-top:12px">
+    <h3>Self-validation — weekly rotation re-check (suggests, never auto-applies)</h3>
+    <div id="valState" class="sub" style="margin-bottom:8px">—</div>
+    <table id="valTable"></table>
+    <div class="sub" style="margin-top:10px">Export ·
+      <a href="/export/reports.csv">reports.csv</a> ·
+      <a href="/export/reports.json">reports.json</a> ·
+      <a href="/export/metrics.csv">metrics.csv</a> ·
+      <a href="/export/metrics.json">metrics.json</a>
+    </div>
   </div>
 
   <div class="card" style="margin-top:12px">
@@ -164,6 +177,25 @@ async function tick(){
       rows+=`<tr${dpl}><td>${o.coin}</td><td class="${o.avg_apr>=0?'pos':'neg'}">${pct(o.avg_apr)}</td><td>${pct(o.now_apr)}</td><td>${pf}</td><td>$${(o.oi_usd/1e6).toFixed(0)}M</td></tr>`;
     }
     $('opps').innerHTML=rows;
+  }
+
+  // self-validation (weekly): current settings vs the in-sample sweep optimum
+  const pct0=x=>x==null?'—':(x*100).toFixed(0)+'%';
+  const v=s.validation;
+  if(v&&v.data&&v.data.ok){
+    const d=v.data, cur=d.current, best=d.best_in_sweep, when=new Date(v.ts*1000).toLocaleString();
+    $('valState').innerHTML=`<b class="${d.at_optimum?'pos':'amb'}">${d.at_optimum?'✓ settings near-optimal':'⚠ suggestion'}</b> — `
+      +`${d.suggestion} <span class="mut">(last run ${when} · ${Math.round(d.span_days)}d of data)</span>`;
+    $('valTable').innerHTML=
+      `<tr><td class="mut">setting</td><td class="mut">current</td><td class="mut">best in sweep</td></tr>`
+      +`<tr><td>switch margin</td><td>${pct0(cur.switch_margin)}</td><td>${pct0(best.switch_margin)}</td></tr>`
+      +`<tr><td>min funding</td><td>${pct0(cur.min_funding)}</td><td>${pct0(best.min_funding)}</td></tr>`
+      +`<tr><td>rotation APR</td><td class="${cur.apr>=0?'pos':'neg'}">${pct(cur.apr)}</td><td class="pos">${pct(best.apr)}</td></tr>`
+      +`<tr><td>vs fixed BTC</td><td colspan=2>${cur.vs_btc_apr==null?'—':pct(cur.vs_btc_apr)+' APR'}</td></tr>`;
+  } else if(v&&v.data){
+    $('valState').textContent='last run: '+(v.data.error||'error');
+  } else {
+    $('valState').textContent='no validation report yet — runs weekly as data accumulates';
   }
 
   $('log').innerHTML=(s.audit||[]).map(e=>{

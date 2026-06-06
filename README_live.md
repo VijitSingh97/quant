@@ -238,6 +238,49 @@ so pointing it at a negative-funding asset correctly does nothing. Notes: you ne
 needs cross-venue spot for other alts; and very high funding is usually thin/transient,
 not a gift.
 
+## Scheduled self-validation (does the rule still hold?)
+
+The engine doesn't blindly trust its own settings. A **weekly** self-validation cycle
+re-runs the rotation backtest on the latest funding history for the *current* config,
+then sweeps the two key knobs (`switch_margin`, `min_funding`) over a small grid and
+records whether the live settings are still near-best — or whether something would have
+done materially better.
+
+```bash
+make validate     # run one report now (-> research.db)   [basis-validate --force]
+```
+
+It **only suggests — it never changes live config.** Auto-tuning parameters on live
+capital is how you overfit yourself into a loss, so any suggested change is flagged
+"review before changing (in-sample edges overfit)" and left for you to apply by hand.
+(The *guarded*, walk-forward, human-approved version is scoped in
+[issue #18](https://github.com/VijitSingh97/quant/issues/18); a regime-based carry-vs-vol
+switch is [issue #17](https://github.com/VijitSingh97/quant/issues/17).)
+
+In the container the `validate` task is in the scheduler's task list and **self-throttles**
+to `BASIS_VALIDATE_INTERVAL_SECONDS` (default weekly), so it runs without a separate cron.
+Each report shows on the dashboard (current vs best-in-sweep + a verdict) and is exportable.
+
+## Data & export — everything in the database
+
+All runtime data lives in **SQLite** (WAL-mode, on the Docker volume):
+
+| DB | Contents |
+|---|---|
+| `data/live.db` | fixed-asset paper carry book (events · orders · fills · positions · pnl) |
+| `data/live_auto.db` | auto-rotating book (same schema + held-asset meta) |
+| `data/research.db` | `metrics` (the logged timeseries) + `reports` (self-validation) |
+
+The metrics logger writes each row to `research.db` **and** keeps `timeseries.csv` (the
+existing backtests still read the CSV). Everything is exportable from the dashboard or
+directly:
+
+```
+GET /export/reports.csv   /export/reports.json     # self-validation history
+GET /export/metrics.csv   /export/metrics.json     # the logged timeseries
+GET /api/reports                                    # recent reports as JSON
+```
+
 ## Read-only live account (Phase 1 — done)
 
 Set your Hyperliquid wallet **address** (public, no secret) to see your real account
@@ -259,6 +302,7 @@ engine.py        reconcile target vs actual -> risk-gated orders -> (paper) fill
 status.py        shared status assembler (one source of truth for CLI + web)
 selector.py      auto asset-selection (persistent funding + hysteresis)
 auto.py          auto-rotating allocator (own book)
+validate.py      scheduled self-validation — re-check the rule weekly, suggest (never apply)
 scheduler.py     supervisor loop (container): run cycles, isolate failures, heartbeat
 healthcheck.py   container HEALTHCHECK — heartbeat freshness
 monitor.py · web.py · dashboard.html   CLI + web tracker

@@ -110,15 +110,27 @@ def append_row(path, fields, row):
             w.writerow(row)
 
 
+def log_to_db(asset, row):
+    """Mirror the metrics row into the research DB (all data in a database, not just CSV)."""
+    from .live.config import RESEARCH_DB
+    from .live.store import Store
+    s = Store(RESEARCH_DB)
+    try:
+        s.add_metric(asset, row)
+    finally:
+        s.close()
+
+
 def main():
-    ap = argparse.ArgumentParser(description="Append one metrics row to data/<asset>_timeseries.csv")
+    ap = argparse.ArgumentParser(description="Append one metrics row to the DB + data/<asset>_timeseries.csv")
     ap.add_argument("--asset", default="BTC", help="asset symbol (BTC default -> timeseries.csv)")
     name = ap.parse_args().asset.upper()
     path = csv_path_for(name)
     row = collect(name)
-    append_row(path, FIELDS, row)
+    append_row(path, FIELDS, row)                 # CSV kept for the existing backtests
+    safe("metrics->db", lambda: log_to_db(name, row))   # + canonical copy in research.db
     print(f"[{name}] {row['iso_time']}  spot={row['spot']}  dvol={row['dvol']}  vrp={row['vrp']}  "
-          f"rr25={row['rr25']}  hl_fund={row['hl_funding_apr']}  -> {path}")
+          f"rr25={row['rr25']}  hl_fund={row['hl_funding_apr']}  -> {path} + research.db")
 
 
 if __name__ == "__main__":

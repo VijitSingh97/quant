@@ -31,6 +31,14 @@ CREATE TABLE IF NOT EXISTS pnl (
     ts REAL NOT NULL, equity_usd REAL, net_delta_btc REAL, note TEXT
 );
 CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT);
+CREATE TABLE IF NOT EXISTS reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts REAL NOT NULL, kind TEXT NOT NULL, summary TEXT, data TEXT
+);
+CREATE TABLE IF NOT EXISTS metrics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts REAL NOT NULL, asset TEXT, data TEXT
+);
 """
 
 
@@ -107,6 +115,49 @@ class Store:
     def get_meta(self, k, default=None):
         r = self.db.execute("SELECT v FROM meta WHERE k=?", (k,)).fetchone()
         return r["v"] if r else default
+
+    # --- research: validation reports + metrics timeseries (research.db) ---
+    def add_report(self, kind, summary, data):
+        self.db.execute("INSERT INTO reports(ts, kind, summary, data) VALUES (?,?,?,?)",
+                        (time.time(), kind, summary, json.dumps(data, default=str)))
+        self.db.commit()
+
+    def latest_report(self, kind):
+        r = self.db.execute("SELECT ts, kind, summary, data FROM reports WHERE kind=? "
+                            "ORDER BY id DESC LIMIT 1", (kind,)).fetchone()
+        return self._report_row(r) if r else None
+
+    def recent_reports(self, kind=None, n=20):
+        if kind:
+            cur = self.db.execute("SELECT ts, kind, summary, data FROM reports WHERE kind=? "
+                                  "ORDER BY id DESC LIMIT ?", (kind, n))
+        else:
+            cur = self.db.execute("SELECT ts, kind, summary, data FROM reports ORDER BY id DESC LIMIT ?", (n,))
+        return [self._report_row(r) for r in cur.fetchall()]
+
+    @staticmethod
+    def _report_row(r):
+        d = dict(r)
+        d["data"] = json.loads(d["data"]) if d["data"] else None
+        return d
+
+    def add_metric(self, asset, data):
+        self.db.execute("INSERT INTO metrics(ts, asset, data) VALUES (?,?,?)",
+                        (time.time(), asset, json.dumps(data, default=str)))
+        self.db.commit()
+
+    def metrics_rows(self, asset=None, n=2000):
+        if asset:
+            cur = self.db.execute("SELECT ts, asset, data FROM metrics WHERE asset=? "
+                                  "ORDER BY id DESC LIMIT ?", (asset, n))
+        else:
+            cur = self.db.execute("SELECT ts, asset, data FROM metrics ORDER BY id DESC LIMIT ?", (n,))
+        rows = []
+        for r in cur.fetchall():
+            d = dict(r)
+            d["data"] = json.loads(d["data"]) if d["data"] else None
+            rows.append(d)
+        return list(reversed(rows))
 
     def close(self):
         self.db.close()

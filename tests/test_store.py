@@ -22,3 +22,16 @@ def test_round_trip(tmp_path):
     s.snapshot_pnl(6000.0, 0.0, "t")
     assert s.latest_pnl()["equity_usd"] == 6000.0
     s.close()
+
+
+def test_reports_and_metrics(tmp_path):
+    s = Store(tmp_path / "research.db")
+    assert s.latest_report("validation") is None
+    s.add_report("validation", "near-optimal", {"ok": True, "current": {"apr": 0.12}})
+    lr = s.latest_report("validation")
+    assert lr["summary"] == "near-optimal" and lr["data"]["current"]["apr"] == 0.12
+    assert len(s.recent_reports("validation")) == 1
+    s.add_metric("BTC", {"spot": 60000, "hl_funding_apr": 0.1})
+    rows = s.metrics_rows()
+    assert rows[-1]["asset"] == "BTC" and rows[-1]["data"]["spot"] == 60000
+    s.close()
