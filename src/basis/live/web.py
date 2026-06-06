@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 
 from . import config
-from .status import build_status, market_snapshot, live_account, opportunities
+from .status import build_status, market_snapshot, live_account, opportunities, reconcile
 from .store import Store
 
 HTML = (Path(__file__).parent / "dashboard.html").read_bytes()
@@ -110,6 +110,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             finally:
                 store.close()
             s["live"] = c["live"]
+            s["reconcile"] = reconcile(s["equity"], s["paper"], c["live"])   # our book vs exchange
             s["validation"] = _research(lambda st: st.latest_report("validation"))
             s["overrides"] = config.load_overrides()      # tuner-applied params (#18)
             s["limits"] = {                                # system / risk config for the dashboard

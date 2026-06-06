@@ -92,6 +92,33 @@ def live_account(client):
         return {"address": getattr(client, "address", ""), "error": str(e)[:90]}
 
 
+def reconcile(our_equity, book, live):
+    """Do OUR numbers match the EXCHANGE's? Compare our book (positions/equity) to the
+    read-only exchange account. Meaningful when both run the SAME strategy — e.g. a paper
+    book vs your testnet account running the same engine (GOING_LIVE.md Step 2.5)."""
+    if not live or live.get("error"):
+        return {"available": False,
+                "reason": (live or {}).get("error") or "set BASIS_HL_ADDRESS (e.g. your testnet account)"}
+
+    def _match(a, b):
+        return abs(a - b) <= max(1e-4, 0.02 * max(abs(a), abs(b)))   # within 2% (or dust)
+
+    os_, op = book["spot"], book["perp"]
+    ts, tp = live.get("spot", 0.0), live.get("perp", 0.0)
+    their_eq = live.get("equity", 0.0)
+    spot_ok, perp_ok = _match(os_, ts), _match(op, tp)
+    return {
+        "available": True,
+        "our_spot": os_, "their_spot": ts, "spot_match": spot_ok,
+        "our_perp": op, "their_perp": tp, "perp_match": perp_ok,
+        "our_delta": book["net_delta"], "their_delta": live.get("net_delta", 0.0),
+        "our_equity": our_equity, "their_equity": their_eq,
+        "equity_diff": our_equity - their_eq,
+        "equity_pct": ((our_equity - their_eq) / their_eq) if their_eq else None,
+        "match": spot_ok and perp_ok,
+    }
+
+
 def build_status(store, market=None, include_live=True, opps=None):
     # the displayed asset is whatever the book holds (auto allocator), else the configured one
     symbol = store.get_meta("held_symbol") or config.SYMBOL
@@ -119,6 +146,7 @@ def build_status(store, market=None, include_live=True, opps=None):
         "position": position_summary(symbol, market["mark"], book, equity,
                                      carry_on=carry_on, kill=kill),
         "paper": book, "live": live, "equity": equity,
+        "reconcile": reconcile(equity, book, live),
         # cross-asset opportunities + whether the engine actually trades the best
         "deployed": {"symbol": symbol, "funding_apr": market["funding_apr"],
                      "auto_rotate": store.get_meta("auto") == "1"},

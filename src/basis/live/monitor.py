@@ -56,6 +56,14 @@ def main():
     else:
         print(f"\n  LIVE account: set BASIS_HL_ADDRESS=0x… for read-only live view (Phase 1)")
 
+    rc = s.get("reconcile") or {}
+    if rc.get("available"):
+        tag = "✓ MATCHES" if rc["match"] else "⚠ DRIFT — check fills/accounting"
+        print(f"\n  RECONCILE (our book vs exchange): {tag}")
+        print(f"    spot   ours {rc['our_spot']:+.4f}  exch {rc['their_spot']:+.4f}  {'✓' if rc['spot_match'] else '≠'}")
+        print(f"    perp   ours {rc['our_perp']:+.4f}  exch {rc['their_perp']:+.4f}  {'✓' if rc['perp_match'] else '≠'}")
+        print(f"    equity ours ${rc['our_equity']:,.2f}  exch ${rc['their_equity']:,.2f}")
+
     if opps:
         best = opps[0]
         print(f"\n  CARRY OPPORTUNITIES (persistent 14d-avg funding, all perps):")

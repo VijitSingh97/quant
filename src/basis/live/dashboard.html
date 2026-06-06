@@ -104,6 +104,12 @@
     <table id="liveAcct"></table>
   </div>
 
+  <div class="card" id="reconCard" style="margin-bottom:12px;display:none">
+    <h3>Reconcile — our book vs exchange<span class="help" data-tip="Do our numbers match the exchange's? Compares our book's positions/equity to the read-only exchange account — ✓ when they agree within 2%. Most meaningful when both run the same strategy (e.g. a paper book vs your testnet account). The validation that our accounting is correct before mainnet.">?</span></h3>
+    <div id="reconState" class="sub" style="margin-bottom:6px">—</div>
+    <table id="reconTable"></table>
+  </div>
+
   <!-- ===================== STRATEGY ===================== -->
   <div class="section">Strategy<span class="help" data-tip="How the engine decides what to trade, and how it checks itself.">?</span></div>
   <div class="card" style="margin-bottom:12px">
@@ -235,6 +241,23 @@ async function tick(){
         `<tr><td>net delta</td><td class="${cls(s.live.net_delta,1e-3)}">${btc(s.live.net_delta)}</td></tr>`+
         `<tr><td>equity</td><td>${usd(s.live.equity)}</td></tr>`;
   } else { $('liveCard').style.display='none'; }
+
+  // ---- reconcile: our book vs the exchange account ----
+  const rc=s.reconcile;
+  if(rc&&rc.available){
+    $('reconCard').style.display='block';
+    $('reconState').innerHTML = rc.match
+      ? '<b class="pos">✓ matches</b> — our positions agree with the exchange'
+      : '<b class="amb">⚠ drift</b> — our book and the exchange disagree (check fills / accounting)';
+    const row=(label,o,t,flag)=>`<tr><td>${label}</td><td>${o}</td><td>${t}</td><td class="${flag===true?'pos':(flag===false?'neg':'mut')}">${flag===true?'✓':(flag===false?'≠':'')}</td></tr>`;
+    const eqpc = rc.equity_pct==null?'':((rc.equity_pct>=0?'+':'')+(rc.equity_pct*100).toFixed(1)+'%');
+    $('reconTable').innerHTML=
+      `<tr><td class="mut"></td><td class="mut">ours</td><td class="mut">exchange</td><td></td></tr>`
+      +row('spot', btc(rc.our_spot), btc(rc.their_spot), rc.spot_match)
+      +row('perp', btc(rc.our_perp), btc(rc.their_perp), rc.perp_match)
+      +row('net delta', btc(rc.our_delta), btc(rc.their_delta), null)
+      +`<tr><td>equity</td><td>${usd(rc.our_equity)}</td><td>${usd(rc.their_equity)}</td><td class="mut">${eqpc}</td></tr>`;
+  } else { $('reconCard').style.display='none'; }
 
   // ---- strategy: deployment line ----
   const dep=s.symbol||'BTC', auto=s.deployed&&s.deployed.auto_rotate;
