@@ -147,8 +147,17 @@ from *your book* to generic *market/system* data, auto-refreshing every 5s:
   table (all perps by persistent funding); and a **system & risk-limits** table.
 
 Every section header and metric has a hoverable **?** with a plain-English explanation,
-so the dashboard is self-documenting. The CLI (`make live-monitor`) shows the same
-POSITION block in text; `make report` / `make report-auto` print the period scorecard.
+so the dashboard is self-documenting.
+
+**The dashboard is the control surface — no CLI required.** A **Tools & backtests** section
+runs any tool from a button (preflight, carry-scan, execution-cost, rotation, regime,
+carry, vrp, combined, robustness, condor, skew, structures, macro, analyze, snapshot) and
+shows its output inline; the **kill switch** toggles from the header; the self-validation
+panel has **run-now / apply-suggestion / rollback / reset** buttons; and reports/metrics
+export from links. The server is threaded so a slow tool doesn't block the refresh, a lock
+serialises actions, and the actions are bounded (no arbitrary exec) — but they DO run
+things, so keep the dashboard on a **trusted LAN / behind your firewall**. The CLI
+(`make ...` / `basis-*`) still works for everything; it's just no longer required.
 
 ## Deploy on a home server (Docker) — recommended
 

@@ -47,6 +47,14 @@
     max-height:240px;overflow:auto;font-family:ui-monospace,Menlo,monospace;font-size:12px}
   .log div{padding:2px 0;color:var(--mut)} .log b{color:var(--fg)}
   svg{width:100%;height:64px} .dim{opacity:.5}
+  button{background:#1b2436;color:var(--fg);border:1px solid var(--line);border-radius:8px;
+    padding:6px 11px;font-size:12px;cursor:pointer;margin:0 6px 6px 0;font-weight:600;font-family:inherit}
+  button:hover{border-color:var(--blue);color:var(--blue)} button:disabled{opacity:.5;cursor:wait}
+  .kbtn{background:#241016;border-color:#5a1a20;color:var(--red)}
+  .kbtn.on{background:var(--red);color:#fff;border-color:var(--red)}
+  pre.out{background:#0d1119;border:1px solid var(--line);border-radius:10px;padding:12px;
+    max-height:440px;overflow:auto;font-family:ui-monospace,Menlo,monospace;font-size:12px;
+    white-space:pre;color:var(--fg);margin:10px 0 0}
 </style>
 </head>
 <body>
@@ -56,7 +64,8 @@
     <span id="mode" class="badge b-paper">paper</span>
     <span id="armed" class="badge b-armed" style="display:none">armed</span>
     <span id="venue" class="mut">hyperliquid</span>
-    <span class="right" id="updated">—</span>
+    <button id="killBtn" class="kbtn" onclick="toggleKill()" style="margin-left:auto">kill switch</button>
+    <span class="mut" id="updated">—</span>
   </header>
   <div id="kill" class="killbar">⛔ KILL SWITCH ACTIVE — trading halted</div>
 
@@ -121,7 +130,13 @@
     <h3>Self-validation — weekly rotation re-check (suggests, never auto-applies)<span class="help" data-tip="A weekly back-test of the current settings on recent data, checked out-of-sample (walk-forward). It suggests changes but never applies them — you approve via basis-tune.">?</span></h3>
     <div id="valState" class="sub" style="margin-bottom:8px">—</div>
     <table id="valTable"></table>
-    <div class="sub" style="margin-top:10px">Export ·
+    <div style="margin-top:10px">
+      <button onclick="action('validate',this)">run validation now</button>
+      <button onclick="action('tune_apply',this)">apply suggestion</button>
+      <button onclick="action('tune_rollback',this)">rollback</button>
+      <button onclick="action('tune_reset',this)">reset to defaults</button>
+    </div>
+    <div class="sub" style="margin-top:8px">Export ·
       <a href="/export/reports.csv">reports.csv</a> ·
       <a href="/export/reports.json">reports.json</a> ·
       <a href="/export/metrics.csv">metrics.csv</a> ·
@@ -153,11 +168,57 @@
     <table id="sys"></table>
   </div>
 
+  <!-- ===================== TOOLS & BACKTESTS ===================== -->
+  <div class="section">Tools &amp; backtests<span class="help" data-tip="Run any tool from here — no CLI needed. Output appears below. Some hit exchanges and take 30–120s; one runs at a time.">?</span></div>
+  <div class="card" style="margin-bottom:12px">
+    <div class="sub" style="margin-bottom:8px">Run any tool — output shows below. (Some pull live data; one runs at a time.)</div>
+    <div style="margin-bottom:4px"><span class="mut" style="display:inline-block;width:74px">decision</span>
+      <button onclick="runTool('preflight',this)">preflight</button>
+      <button onclick="runTool('carry-scan',this)">carry scan</button>
+      <button onclick="runTool('execost',this)">execution cost</button>
+    </div>
+    <div style="margin-bottom:4px"><span class="mut" style="display:inline-block;width:74px">backtests</span>
+      <button onclick="runTool('rotation',this)">rotation</button>
+      <button onclick="runTool('regime',this)">regime</button>
+      <button onclick="runTool('carry',this)">carry</button>
+      <button onclick="runTool('vrp',this)">vrp</button>
+      <button onclick="runTool('combined',this)">combined</button>
+      <button onclick="runTool('robust',this)">robustness</button>
+      <button onclick="runTool('condor-bt',this)">condor</button>
+    </div>
+    <div><span class="mut" style="display:inline-block;width:74px">analysis</span>
+      <button onclick="runTool('skew',this)">skew</button>
+      <button onclick="runTool('structures',this)">structures</button>
+      <button onclick="runTool('macro',this)">macro</button>
+      <button onclick="runTool('analyze',this)">analyze</button>
+      <button onclick="runTool('snapshot',this)">snapshot</button>
+    </div>
+    <pre id="toolout" class="out">click a tool to run it — output appears here</pre>
+  </div>
+
   <p class="sub dim">Auto-refreshes every 5s · paper mode simulates fills · educational, not investment advice</p>
 </div>
 
 <script>
 const $=id=>document.getElementById(id);
+let lastKill=false, lastReportId=null;
+async function post(p){ const r=await fetch(p,{method:'POST'}); return r.json(); }
+async function runTool(name, btn){
+  const o=btn.textContent; btn.disabled=true; btn.textContent='running…';
+  $('toolout').textContent='running '+name+'… (may take 30–120s)';
+  try{ const j=await post('/run?tool='+encodeURIComponent(name)); $('toolout').textContent=j.output||'(no output)'; }
+  catch(e){ $('toolout').textContent='error: '+e; }
+  finally{ btn.disabled=false; btn.textContent=o; tick(); }
+}
+async function action(name, btn){
+  const o=btn?btn.textContent:''; if(btn){btn.disabled=true; btn.textContent='…';}
+  const extra = name==='tune_apply' && lastReportId!=null ? '&id='+lastReportId : '';
+  try{ const j=await post('/action?do='+name+extra);
+       $('toolout').textContent=((j.msg||'')+(j.output?('\n\n'+j.output):'')).trim()||'done'; }
+  catch(e){ $('toolout').textContent='error: '+e; }
+  finally{ if(btn){btn.disabled=false; btn.textContent=o;} tick(); }
+}
+async function toggleKill(){ await post('/action?do='+(lastKill?'kill_off':'kill_on')); tick(); }
 const usd=x=>x==null?'—':'$'+Number(x).toLocaleString(undefined,{maximumFractionDigits:2});
 const btc=x=>x==null?'—':(x>=0?'+':'')+Number(x).toFixed(4);
 const pct=x=>x==null?'—':(x>=0?'+':'')+(x*100).toFixed(1)+'%';
@@ -183,6 +244,9 @@ async function tick(){
   $('venue').textContent=s.venue+' · '+(s.symbol||'BTC');
   $('updated').textContent='updated '+new Date(s.ts*1000).toLocaleTimeString();
   $('kill').style.display=s.kill?'block':'none';
+  lastKill=!!s.kill;
+  $('killBtn').textContent=s.kill?'● KILL ACTIVE — resume':'kill switch';
+  $('killBtn').className='kbtn'+(s.kill?' on':'');
 
   // ---- position banner ----
   const ps=s.position||{};
@@ -279,6 +343,7 @@ async function tick(){
 
   // ---- self-validation ----
   const v=s.validation;
+  lastReportId = v && v.id != null ? v.id : null;
   if(v&&v.data&&v.data.ok){
     const d=v.data, cur=d.current, bw=d.best_in_sweep, when=new Date(v.ts*1000).toLocaleString();
     $('valState').innerHTML=`<b class="${d.at_optimum?'pos':'amb'}">${d.at_optimum?'✓ settings near-optimal':'⚠ suggestion'}</b> — `

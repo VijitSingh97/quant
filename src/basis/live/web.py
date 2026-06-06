@@ -1,18 +1,23 @@
-"""Web dashboard — stdlib http.server, no dependencies.
+"""Web dashboard — stdlib http.server, no dependencies. The single control surface.
 
-Serves a single-page UI (dashboard.html) + a /api/status JSON endpoint backed by the
-shared status assembler. Market/live data is cached ~30s so the 5s UI refresh doesn't
-hammer the exchanges; store reads are fresh each call.
+Serves a single-page UI (dashboard.html) + a /api/status JSON endpoint, AND interactive
+POST actions so everything is on the dashboard (no CLI required): run any tool/backtest,
+run the self-validation, apply/rollback tuning, and toggle the kill switch. Threaded so a
+slow action (a backtest that hits exchanges) doesn't block the 5s refresh; a lock
+serializes actions. Read-mostly + bounded actions — run it on a trusted LAN.
 
 Run:  python3 -m basis.live.web   ->  http://localhost:8787
 """
 
+import contextlib
 import csv
 import http.server
+import importlib
 import io
 import json
 import os
-import socketserver
+import sys
+import threading
 import time
 from pathlib import Path
 
@@ -22,6 +27,86 @@ from .store import Store
 
 HTML = (Path(__file__).parent / "dashboard.html").read_bytes()
 _cache = {"market": None, "live": None, "opps": None, "mts": 0.0, "ots": 0.0}
+_LOCK = threading.Lock()      # serialize actions (avoid sys.argv races + hammering exchanges)
+
+# Every CLI tool, runnable from the dashboard. name -> (group, module). The module's main()
+# is called with default args (argv reset), stdout captured and returned to the UI.
+TOOLS = {
+    "preflight":  ("decision", "basis.live.preflight"),
+    "carry-scan": ("decision", "basis.carryscan"),
+    "execost":    ("decision", "basis.execost"),
+    "rotation":   ("backtest", "basis.backtests.rotation"),
+    "regime":     ("backtest", "basis.backtests.regime"),
+    "carry":      ("backtest", "basis.backtests.carry"),
+    "vrp":        ("backtest", "basis.backtests.vrp"),
+    "combined":   ("backtest", "basis.backtests.combined"),
+    "robust":     ("backtest", "basis.backtests.robustness"),
+    "condor-bt":  ("backtest", "basis.backtests.structures"),
+    "skew":       ("analysis", "basis.skew"),
+    "structures": ("analysis", "basis.structures"),
+    "macro":      ("analysis", "basis.macro"),
+    "analyze":    ("analysis", "basis.analyze"),
+    "snapshot":   ("analysis", "basis.dashboard"),
+}
+
+
+def _capture(fn, argv=("basis",)):
+    """Run fn() with a clean argv (so argparse uses defaults), capturing stdout -> str."""
+    with _LOCK:
+        old = sys.argv
+        sys.argv = list(argv)
+        buf = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(buf):
+                fn()
+        except SystemExit:
+            pass
+        except Exception as e:      # noqa: BLE001 — surface tool errors to the UI, don't crash the server
+            buf.write(f"\n[error] {type(e).__name__}: {e}")
+        finally:
+            sys.argv = old
+        return buf.getvalue()
+
+
+def run_tool(name):
+    if name not in TOOLS:
+        return f"unknown tool: {name}"
+    mod = importlib.import_module(TOOLS[name][1])
+    return _capture(mod.main, argv=[name])
+
+
+def do_action(do, params):
+    """Mutating dashboard actions (bounded): kill switch, validation, tuning."""
+    if do == "kill_on":
+        config.KILL_FILE.parent.mkdir(parents=True, exist_ok=True)
+        config.KILL_FILE.write_text("dashboard")
+        return {"ok": True, "msg": "KILL SWITCH ON — all trading halted"}
+    if do == "kill_off":
+        try:
+            config.KILL_FILE.unlink()
+        except FileNotFoundError:
+            pass
+        return {"ok": True, "msg": "kill switch cleared — trading can resume"}
+    if do == "validate":
+        from .validate import main as vmain
+        return {"ok": True, "output": _capture(lambda: vmain(force=True))}
+    if do in ("tune_apply", "tune_rollback", "tune_reset"):
+        from . import tune
+        st = Store(config.RESEARCH_DB)
+
+        def _do():
+            if do == "tune_apply":
+                tune.apply_cmd(st, int((params.get("id") or ["0"])[0]))
+            elif do == "tune_rollback":
+                tune.rollback_cmd(st)
+            else:
+                tune.reset_cmd(st)
+        try:
+            out = _capture(_do)
+        finally:
+            st.close()
+        return {"ok": True, "output": out}
+    return {"ok": False, "msg": f"unknown action: {do}"}
 
 
 def _research(fn):
@@ -153,6 +238,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
         else:
             self._send(404, b"not found", "text/plain")
 
+    def do_POST(self):
+        from urllib.parse import urlparse, parse_qs
+        u = urlparse(self.path)
+        q = parse_qs(u.query)
+        n = int(self.headers.get("Content-Length", 0) or 0)
+        if n:
+            self.rfile.read(n)                      # drain any body
+        if u.path == "/run":
+            out = run_tool((q.get("tool") or [""])[0])
+            self._send(200, json.dumps({"output": out}).encode(), "application/json")
+        elif u.path == "/action":
+            res = do_action((q.get("do") or [""])[0], q)
+            self._send(200, json.dumps(res, default=str).encode(), "application/json")
+        else:
+            self._send(404, b"not found", "text/plain")
+
     def log_message(self, *a):
         pass
 
@@ -162,8 +263,8 @@ def main():
     # Default to loopback for safe local/CLI use; containers set 0.0.0.0 to be reachable.
     host = os.environ.get("BASIS_WEB_HOST", "127.0.0.1")
     print(f"basis.live dashboard -> http://{host}:{port}   (Ctrl-C to stop)")
-    socketserver.TCPServer.allow_reuse_address = True
-    with socketserver.TCPServer((host, port), Handler) as httpd:
+    http.server.ThreadingHTTPServer.allow_reuse_address = True
+    with http.server.ThreadingHTTPServer((host, port), Handler) as httpd:
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:
