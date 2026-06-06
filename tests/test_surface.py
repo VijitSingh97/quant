@@ -1,6 +1,6 @@
 import math
 
-from btcvol.core import surface as sf
+from basis.core import surface as sf
 
 
 def test_interp_linear_midpoint():

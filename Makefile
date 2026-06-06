@@ -45,70 +45,70 @@ test-integration:
 	$(PY) -m pytest -q -m integration -rs
 
 dashboard:
-	$(PY) -m btcvol.dashboard
+	$(PY) -m basis.dashboard
 
 monitor:
-	$(PY) -m btcvol.monitor
+	$(PY) -m basis.monitor
 
 carry:
-	$(PY) -m btcvol.backtests.carry $(YEARS)
+	$(PY) -m basis.backtests.carry $(YEARS)
 
 vrp:
-	$(PY) -m btcvol.backtests.vrp
+	$(PY) -m basis.backtests.vrp
 
 condor-bt:
-	$(PY) -m btcvol.backtests.structures
+	$(PY) -m basis.backtests.structures
 
 combined:
-	$(PY) -m btcvol.backtests.combined
+	$(PY) -m basis.backtests.combined
 
 histskew:
-	$(PY) -m btcvol.backtests.histskew
+	$(PY) -m basis.backtests.histskew
 
 robust:
-	$(PY) -m btcvol.backtests.robustness
+	$(PY) -m basis.backtests.robustness
 
 structures:
-	$(PY) -m btcvol.structures
+	$(PY) -m basis.structures
 
 skew:
-	$(PY) -m btcvol.skew
+	$(PY) -m basis.skew
 
 book:
-	$(PY) -m btcvol.book
+	$(PY) -m basis.book
 
 size:
-	$(PY) -m btcvol.size
+	$(PY) -m basis.size
 
 analyze:
-	$(PY) -m btcvol.analyze
+	$(PY) -m basis.analyze
 
 macro:
-	$(PY) -m btcvol.macro
+	$(PY) -m basis.macro
 
 backfill:
-	$(PY) -m btcvol.backfill --start 2023-09
+	$(PY) -m basis.backfill --start 2023-09
 
 carry-scan:
-	$(PY) -m btcvol.carryscan
+	$(PY) -m basis.carryscan
 
 histskew2:
-	$(PY) -m btcvol.backtests.structures --histskew
+	$(PY) -m basis.backtests.structures --histskew
 
 log:
-	$(PY) -m btcvol.logger
+	$(PY) -m basis.logger
 
 live-paper:
-	$(PY) -m btcvol.live.engine
+	$(PY) -m basis.live.engine
 
 live-auto:
-	$(PY) -m btcvol.live.auto
+	$(PY) -m basis.live.auto
 
 live-monitor:
-	$(PY) -m btcvol.live.monitor
+	$(PY) -m basis.live.monitor
 
 live-web:
-	$(PY) -m btcvol.live.web
+	$(PY) -m basis.live.web
 
 launchd-install:
 	./scripts/install_launchd.sh

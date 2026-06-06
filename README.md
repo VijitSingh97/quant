@@ -1,9 +1,10 @@
-# btcvol — BTC volatility & funding-carry toolkit
+# basis — market-neutral crypto carry & volatility toolkit
 
-A dependency-free (Python stdlib only) research toolkit for monetizing **BTC
-volatility** with risk control. It's built around two market-neutral "steady
-income" engines — **delta-neutral funding carry** and **defined-risk volatility
-selling** — plus the live data and backtests to decide *when* each is worth running.
+A dependency-free (Python stdlib only) toolkit for steady, **market-neutral**
+income from crypto. It's built around two engines — **delta-neutral funding carry**
+(the *basis trade*: long spot / short perp, across all liquid perp markets) and
+**defined-risk volatility selling** — plus the live data, backtests, and a
+paper-first execution layer to decide *when* each is worth running and to run it.
 
 > **Disclaimer.** Educational tooling, **not investment advice**. Backtests smooth
 > over fees, skew, slippage, and the tail events that actually blow up short-vol and
@@ -32,11 +33,11 @@ The tools quantify both edges on live and historical data so you can size them.
 Python ≥ 3.9, no third-party dependencies.
 
 ```bash
-# editable install -> gives you the btcvol-* console commands
+# editable install -> gives you the basis-* console commands
 pip install -e .
 
 # or run without installing (every tool is a module)
-PYTHONPATH=src python3 -m btcvol.dashboard
+PYTHONPATH=src python3 -m basis.dashboard
 ```
 
 A `Makefile` wraps the common commands: `make dashboard`, `make monitor`,
@@ -48,23 +49,23 @@ A `Makefile` wraps the common commands: `make dashboard`, `make monitor`,
 
 | Module / command | What it does |
 |---|---|
-| `btcvol.dashboard` / `btcvol-dashboard` | One-shot snapshot: spot, realized vol, DVOL implied vol, futures-basis term structure, perp funding/OI — plus an interpreted **suggested direction**. Saves a JSON snapshot to `data/`. |
-| `btcvol.backtests.carry` / `btcvol-carry [years]` | Backtests long-spot/short-perp funding carry on multi-year Deribit hourly funding. APR, Sharpe, drawdown, % negative, yearly breakdown. |
-| `btcvol.backtests.vrp` / `btcvol-vrp` | Backtests selling 30d vol *naked* (DVOL vs forward realized). Win rate, avg premium, worst tail roll, Sharpe. |
-| `btcvol.backtests.robustness` / `btcvol-robust` | **Anti-overfit checks**: parameter sweep (Δ × wing), walk-forward (in/out-of-sample), and fee-drag — reuses one market pull. Verdict flags whether the edge is broad or a knife-edge. Flags: `--risk`, `--fee-bps`, `--flat`. |
-| `btcvol.backtests.combined` / `btcvol-combined` | **Combines the two engines into one book**: funding carry (levered) + the skew-priced condor, over a common window. Defaults to the **strongest config** — VOV-gated condor + funding-timed carry. Reports each leg vs combined (total/CAGR/Sharpe/maxDD) and the leg correlation. Flags: `--leverage`, `--risk`, `--vol-target`, `--no-vov`, `--no-timed`. |
-| `btcvol.backfill` / `btcvol-backfill` | **Backfills historical IV-surface skew** from Tardis.dev free monthly Deribit option-chain snapshots (back to 2020) → `data/skew_history.csv`. Gives real historical RR/BF *now* instead of waiting on the logger. `--asset`, `--start`. |
-| `btcvol.backtests.structures --histskew` | Condor backtest priced with **real per-roll historical skew** (from the Tardis backfill) vs the static fit — answers whether the static-skew approximation was biased. |
-| `btcvol.backtests.structures` / `btcvol-condor-bt` | Backtests the **monthly defined-risk condor rule**: rolls a delta-based iron condor (synthetic credit @ historical DVOL, real price path for the payoff), compares sell-every-month vs a DVOL>RV filter, and shows the capped tail vs the naked book. Flags: `--delta`, `--wing-pct`, `--risk`. |
-| `btcvol.structures` / `btcvol-structures` | Builds **defined-risk** short-vol structures (iron condor, put/call credit spreads) from the live Deribit chain. Prices legs conservatively (sell at bid, buy wings at ask) and reports max loss, breakevens, probability of profit (BS under implied), expected value under realized, and an ASCII payoff diagram. Flags: `--dte`, `--delta`, `--wing`. |
-| `btcvol.skew` / `btcvol-skew` | Reads the live implied-vol **surface**: per-expiry ATM/25Δ vols, risk-reversal (RR25) and butterfly (BF25), the ATM term structure (contango/backwardation), an ASCII smile, and a fitted parametric skew shape that the condor backtest reuses. |
-| `btcvol.monitor` / `btcvol-monitor` | Live perp funding across 4 venues, normalized to APR, plus the cross-venue spread / arb flag. |
-| `btcvol.size` / `btcvol-size` | **Position sizer.** Vol-target scale (halve size when vol doubles) + fractional-Kelly stake from a win-rate/payoff. Flags: `--target-vol`, `--position-vol`, `--win-prob`, `--win-loss`. |
-| `btcvol.carryscan` / `btcvol-carry-scan` | **Cross-asset/venue carry scanner.** Scans **all** Hyperliquid perps (230, not just BTC) and ranks by **persistent** funding (multi-day average + % hours positive), surfacing structurally-hot, inefficiently-priced markets (e.g. XMR ~+32%, hard-to-short) vs one-hour spikes (PURR). Pulls Binance/Bybit where reachable for cross-venue best-market/spread. `--min-oi`, `--top`, `--days`. |
-| `btcvol.book` / `btcvol-book` | **Delta-neutral book monitor.** Reads a positions file (spot/perp/option legs), prices each leg's delta off the live chain, reports net delta (BTC + USD), and suggests the perp hedge to flatten. `--threshold`, `--strict` (exit nonzero on drift). See `examples/positions.example.json`. |
-| `btcvol.analyze` / `btcvol-analyze` | Summarizes our **own captured** `data/timeseries.csv`: VRP, funding, skew (RR25/BF25/RR10), basis/OI distributions and exploratory correlations. Degrades gracefully with little history. |
-| `btcvol.macro` / `btcvol-macro` | **Cross-asset VRP** for equities/commodities via Yahoo: implied (VIX-family `^VIX`/`^GVZ`/`^OVX`) vs realized for the S&P, gold, or oil. `--asset SPX\|GOLD\|OIL`. (Vol-selling ports; funding carry does not.) |
-| `btcvol.logger` / `btcvol-log` | Appends one compact metrics row to `data/timeseries.csv` (spot, RV, DVOL, VRP, funding, basis, OI, and the IV-surface **ATM/RR25/BF25/term-slope** — skew has no public historical source, so we capture our own). The launchd target; migrates the CSV schema in place when columns are added. |
+| `basis.dashboard` / `basis-dashboard` | One-shot snapshot: spot, realized vol, DVOL implied vol, futures-basis term structure, perp funding/OI — plus an interpreted **suggested direction**. Saves a JSON snapshot to `data/`. |
+| `basis.backtests.carry` / `basis-carry [years]` | Backtests long-spot/short-perp funding carry on multi-year Deribit hourly funding. APR, Sharpe, drawdown, % negative, yearly breakdown. |
+| `basis.backtests.vrp` / `basis-vrp` | Backtests selling 30d vol *naked* (DVOL vs forward realized). Win rate, avg premium, worst tail roll, Sharpe. |
+| `basis.backtests.robustness` / `basis-robust` | **Anti-overfit checks**: parameter sweep (Δ × wing), walk-forward (in/out-of-sample), and fee-drag — reuses one market pull. Verdict flags whether the edge is broad or a knife-edge. Flags: `--risk`, `--fee-bps`, `--flat`. |
+| `basis.backtests.combined` / `basis-combined` | **Combines the two engines into one book**: funding carry (levered) + the skew-priced condor, over a common window. Defaults to the **strongest config** — VOV-gated condor + funding-timed carry. Reports each leg vs combined (total/CAGR/Sharpe/maxDD) and the leg correlation. Flags: `--leverage`, `--risk`, `--vol-target`, `--no-vov`, `--no-timed`. |
+| `basis.backfill` / `basis-backfill` | **Backfills historical IV-surface skew** from Tardis.dev free monthly Deribit option-chain snapshots (back to 2020) → `data/skew_history.csv`. Gives real historical RR/BF *now* instead of waiting on the logger. `--asset`, `--start`. |
+| `basis.backtests.structures --histskew` | Condor backtest priced with **real per-roll historical skew** (from the Tardis backfill) vs the static fit — answers whether the static-skew approximation was biased. |
+| `basis.backtests.structures` / `basis-condor-bt` | Backtests the **monthly defined-risk condor rule**: rolls a delta-based iron condor (synthetic credit @ historical DVOL, real price path for the payoff), compares sell-every-month vs a DVOL>RV filter, and shows the capped tail vs the naked book. Flags: `--delta`, `--wing-pct`, `--risk`. |
+| `basis.structures` / `basis-structures` | Builds **defined-risk** short-vol structures (iron condor, put/call credit spreads) from the live Deribit chain. Prices legs conservatively (sell at bid, buy wings at ask) and reports max loss, breakevens, probability of profit (BS under implied), expected value under realized, and an ASCII payoff diagram. Flags: `--dte`, `--delta`, `--wing`. |
+| `basis.skew` / `basis-skew` | Reads the live implied-vol **surface**: per-expiry ATM/25Δ vols, risk-reversal (RR25) and butterfly (BF25), the ATM term structure (contango/backwardation), an ASCII smile, and a fitted parametric skew shape that the condor backtest reuses. |
+| `basis.monitor` / `basis-monitor` | Live perp funding across 4 venues, normalized to APR, plus the cross-venue spread / arb flag. |
+| `basis.size` / `basis-size` | **Position sizer.** Vol-target scale (halve size when vol doubles) + fractional-Kelly stake from a win-rate/payoff. Flags: `--target-vol`, `--position-vol`, `--win-prob`, `--win-loss`. |
+| `basis.carryscan` / `basis-carry-scan` | **Cross-asset/venue carry scanner.** Scans **all** Hyperliquid perps (230, not just BTC) and ranks by **persistent** funding (multi-day average + % hours positive), surfacing structurally-hot, inefficiently-priced markets (e.g. XMR ~+32%, hard-to-short) vs one-hour spikes (PURR). Pulls Binance/Bybit where reachable for cross-venue best-market/spread. `--min-oi`, `--top`, `--days`. |
+| `basis.book` / `basis-book` | **Delta-neutral book monitor.** Reads a positions file (spot/perp/option legs), prices each leg's delta off the live chain, reports net delta (BTC + USD), and suggests the perp hedge to flatten. `--threshold`, `--strict` (exit nonzero on drift). See `examples/positions.example.json`. |
+| `basis.analyze` / `basis-analyze` | Summarizes our **own captured** `data/timeseries.csv`: VRP, funding, skew (RR25/BF25/RR10), basis/OI distributions and exploratory correlations. Degrades gracefully with little history. |
+| `basis.macro` / `basis-macro` | **Cross-asset VRP** for equities/commodities via Yahoo: implied (VIX-family `^VIX`/`^GVZ`/`^OVX`) vs realized for the S&P, gold, or oil. `--asset SPX\|GOLD\|OIL`. (Vol-selling ports; funding carry does not.) |
+| `basis.logger` / `basis-log` | Appends one compact metrics row to `data/timeseries.csv` (spot, RV, DVOL, VRP, funding, basis, OI, and the IV-surface **ATM/RR25/BF25/term-slope** — skew has no public historical source, so we capture our own). The launchd target; migrates the CSV schema in place when columns are added. |
 
 ### Example
 
@@ -85,10 +86,10 @@ options + perp funding); `SOL` has perps + options but no DVOL (so the vol backt
 skip it); `PAXG` (tokenized gold) is a Deribit index/vol reference only.
 
 ```bash
-PYTHONPATH=src python3 -m btcvol.dashboard --asset ETH
-PYTHONPATH=src python3 -m btcvol.skew --asset ETH
-PYTHONPATH=src python3 -m btcvol.backtests.combined --asset ETH --vol-target 0.18
-PYTHONPATH=src python3 -m btcvol.logger --asset ETH      # -> data/eth_timeseries.csv
+PYTHONPATH=src python3 -m basis.dashboard --asset ETH
+PYTHONPATH=src python3 -m basis.skew --asset ETH
+PYTHONPATH=src python3 -m basis.backtests.combined --asset ETH --vol-target 0.18
+PYTHONPATH=src python3 -m basis.logger --asset ETH      # -> data/eth_timeseries.csv
 ```
 
 The logger writes each asset to its own `data/<asset>_timeseries.csv` (BTC stays
@@ -98,16 +99,16 @@ The logger writes each asset to its own `data/<asset>_timeseries.csv` (BTC stays
 
 ## Live execution (paper-first) — see [README_live.md](README_live.md)
 
-The research above feeds a safety-first execution layer (`btcvol.live`) that runs the
+The research above feeds a safety-first execution layer (`basis.live`) that runs the
 carry strategy in **paper mode by default** — live prices, simulated fills, full audit
 trail, no API keys, no real money. Order placement is gated until you opt into live.
 
 ```bash
-make live-paper      # one reconcile cycle (fixed asset)        [btcvol-live]
-make live-auto       # auto-select best persistent-carry asset  [btcvol-live-auto]
-make live-monitor    # CLI book status + carry opportunities    [btcvol-live-monitor]
-make live-web        # web dashboard -> localhost:8787          [btcvol-live-web]
-make carry-scan      # rank all perps by persistent funding     [btcvol-carry-scan]
+make live-paper      # one reconcile cycle (fixed asset)        [basis-live]
+make live-auto       # auto-select best persistent-carry asset  [basis-live-auto]
+make live-monitor    # CLI book status + carry opportunities    [basis-live-monitor]
+make live-web        # web dashboard -> localhost:8787          [basis-live-web]
+make carry-scan      # rank all perps by persistent funding     [basis-carry-scan]
 ```
 
 Risk gate (USD limits + kill switch), SQLite audit store, read-only-first Hyperliquid
@@ -123,7 +124,7 @@ quant/
 ├── pyproject.toml            packaging + console scripts + pytest config
 ├── Makefile                  convenience targets
 ├── README.md  LICENSE  .gitignore
-├── src/btcvol/
+├── src/basis/
 │   ├── __init__.py
 │   ├── dashboard.py          market snapshot + interpretation
 │   ├── monitor.py            cross-venue funding monitor
@@ -169,7 +170,7 @@ quant/
 │   ├── install_launchd.sh    render plist + load the agent
 │   └── uninstall_launchd.sh  unload + remove
 ├── deploy/
-│   └── com.vijit.btcvol.logger.plist   launchd template (__ROOT__ substituted on install)
+│   └── com.vijit.basis.logger.plist   launchd template (__ROOT__ substituted on install)
 ├── tests/                    pure-function unit tests (no network)
 └── data/                     snapshots, timeseries.csv, logs (git-ignored)
 ```
@@ -207,7 +208,7 @@ cron it survives sleep (the timer fires on wake).
 ```bash
 make launchd-install      # render plist into ~/Library/LaunchAgents and load it
 make launchd-uninstall    # unload + remove (leaves data/ intact)
-launchctl list | grep btcvol     # check it's loaded
+launchctl list | grep basis     # check it's loaded
 ```
 
 - Dataset grows in `data/timeseries.csv`; agent stdout/stderr in
@@ -296,4 +297,4 @@ completed work is closed there (each feature commit references its issue). All b
 items are done; the two open issues are now **data-gated, not code-gated**:
 
 - [#4](https://github.com/VijitSingh97/quant/issues/4) — data-accumulation tracker (always-on; do not close)
-- [#6](https://github.com/VijitSingh97/quant/issues/6) — historical-skew condor backtest: the tool (`btcvol.backtests.histskew`) is **built and tested**; it degrades gracefully until the logger has a few months of skew history, then prints logged-skew vs static-skew side by side.
+- [#6](https://github.com/VijitSingh97/quant/issues/6) — historical-skew condor backtest: the tool (`basis.backtests.histskew`) is **built and tested**; it degrades gracefully until the logger has a few months of skew history, then prints logged-skew vs static-skew side by side.

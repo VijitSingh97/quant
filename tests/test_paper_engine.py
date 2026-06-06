@@ -3,10 +3,11 @@ reconcile loop convergence, and the auto allocator's flatten — using a fixed-m
 PaperExchange subclass so nothing hits the network.
 """
 
-from btcvol.live import auto, engine
-from btcvol.live.exchanges.base import Order
-from btcvol.live.exchanges.paper import PaperExchange
-from btcvol.live.store import Store
+from basis.live import auto, engine
+from basis.live.exchanges.base import Order
+from basis.live.exchanges.paper import PaperExchange
+from basis.live.status import paper_book, position_summary
+from basis.live.store import Store
 
 
 class FixedPaper(PaperExchange):
@@ -81,3 +82,30 @@ def test_auto_flatten_zeros_legs(tmp_path):
     auto._flatten(px, store)
     pos = px.positions()
     assert abs(pos["spot"]) < 1e-9 and abs(pos["perp"]) < 1e-9
+
+
+# --- position summary (the "what are we in right now" view) ---
+def test_position_summary_deployed(tmp_path):
+    px = _px(tmp_path)
+    px.place_order(Order("BTC", "buy", 0.05, "spot"))
+    px.place_order(Order("BTC", "sell", 0.05, "perp"))
+    p = position_summary("BTC", px.MARK, paper_book(px.store), px.equity_usd(),
+                         carry_on=True, kill=False)
+    assert p["pair"] == "BTC-SPOT / BTC-PERP" and p["engaged"]
+    assert "DEPLOYED" in p["state"]
+    assert abs(p["net_delta_usd"]) < 1e-6 and 0.9 < p["leverage"] < 1.1   # neutral, ~1x gross
+
+
+def test_position_summary_flat_in_cash(tmp_path):
+    px = _px(tmp_path)
+    p = position_summary("BTC", px.MARK, paper_book(px.store), px.equity_usd(),
+                         carry_on=True, kill=False)
+    assert not p["engaged"] and "FLAT" in p["state"] and p["gross_notional_usd"] == 0
+
+
+def test_position_summary_halted_overrides(tmp_path):
+    px = _px(tmp_path)
+    px.place_order(Order("BTC", "buy", 0.05, "spot"))
+    p = position_summary("BTC", px.MARK, paper_book(px.store), px.equity_usd(),
+                         carry_on=True, kill=True)
+    assert "HALTED" in p["state"]

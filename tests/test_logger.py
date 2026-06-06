@@ -1,6 +1,6 @@
 import csv
 
-from btcvol.logger import append_row
+from basis.logger import append_row
 
 
 def _read(p):

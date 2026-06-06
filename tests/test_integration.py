@@ -10,12 +10,12 @@ venues like Binance/Bybit don't fail the suite); a wrong shape FAILS (that's the
 
 import pytest
 
-from btcvol.core.sources import (
+from basis.core.sources import (
     hyperliquid_perp, hl_all_funding, hl_funding_stats, coinbase_spot_and_candles,
     deribit_vol_and_basis, deribit_dvol, deribit_option_chain, deribit_funding_history,
     okx_perp, yahoo_chart, tardis_options_chain, binance_all_funding, bybit_all_funding,
 )
-from btcvol.live.exchanges.hyperliquid import HyperliquidClient
+from basis.live.exchanges.hyperliquid import HyperliquidClient
 
 pytestmark = pytest.mark.integration
 

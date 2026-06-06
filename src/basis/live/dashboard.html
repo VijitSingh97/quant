@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>basis · live</title>
+<style>
+  :root{--bg:#0b0e14;--card:#141925;--line:#222a3a;--fg:#e6e9ef;--mut:#8b94a7;
+        --grn:#3ddc97;--amb:#f5b14c;--red:#ff5d6c;--blue:#5aa9ff}
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--fg);
+    font:14px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  .wrap{max-width:1100px;margin:0 auto;padding:20px}
+  header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:16px}
+  h1{font-size:18px;margin:0;letter-spacing:.5px} h1 b{color:var(--blue)}
+  .badge{font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px;text-transform:uppercase;letter-spacing:.6px}
+  .b-paper{background:#3a2f12;color:var(--amb)} .b-live{background:#0f3a2a;color:var(--grn)}
+  .mut{color:var(--mut)} .right{margin-left:auto;color:var(--mut);font-size:12px}
+  .killbar{background:#3a0e12;color:var(--red);border:1px solid #5a1a20;padding:10px 14px;
+    border-radius:10px;margin-bottom:14px;font-weight:700;display:none}
+  .posbanner{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--blue);
+    border-radius:12px;padding:13px 16px;margin-bottom:12px}
+  .posstate{font-size:17px;font-weight:700;letter-spacing:.3px}
+  .posmeta{margin-top:4px;font-size:13px;color:var(--fg)} .posmeta b{color:var(--fg)}
+  .psep{color:var(--mut);margin:0 9px}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .card h3{margin:0 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--mut);font-weight:600}
+  .big{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums}
+  .sub{font-size:12px;color:var(--mut)}
+  .row2{display:grid;grid-template-columns:1.2fr 1fr;gap:12px}
+  table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+  td{padding:4px 0;border-bottom:1px solid var(--line)} td:last-child{text-align:right}
+  .pos{color:var(--grn)} .neg{color:var(--red)} .neu{color:var(--blue)}
+  .log{background:#0d1119;border:1px solid var(--line);border-radius:12px;padding:10px;
+    max-height:240px;overflow:auto;font-family:ui-monospace,Menlo,monospace;font-size:12px}
+  .log div{padding:2px 0;color:var(--mut)} .log b{color:var(--fg)}
+  svg{width:100%;height:60px} .dim{opacity:.5}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1><b>basis</b> · live</h1>
+    <span id="mode" class="badge b-paper">paper</span>
+    <span id="venue" class="mut">hyperliquid</span>
+    <span class="right" id="updated">—</span>
+  </header>
+  <div id="kill" class="killbar">⛔ KILL SWITCH ACTIVE — trading halted</div>
+
+  <div id="posBanner" class="posbanner">
+    <div class="posstate" id="posState">—</div>
+    <div class="posmeta">
+      <span id="posPair">—</span>
+      <span class="psep">·</span><span id="posLegs" class="mut">—</span>
+      <span class="psep">·</span><span id="posLev">—</span>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card"><h3>Net delta</h3><div id="delta" class="big">—</div><div id="deltaSub" class="sub">BTC</div></div>
+    <div class="card"><h3>Equity</h3><div id="equity" class="big">—</div><div class="sub">paper book</div></div>
+    <div class="card"><h3>Funding earned</h3><div id="funding" class="big">—</div><div class="sub">accrued (paper)</div></div>
+    <div class="card"><h3>Funding rate</h3><div id="apr" class="big">—</div><div id="carry" class="sub">—</div></div>
+  </div>
+
+  <div class="row2">
+    <div class="card">
+      <h3>Carry book — target vs actual</h3>
+      <table id="book"></table>
+    </div>
+    <div class="card">
+      <h3>Equity / P&amp;L</h3>
+      <svg id="spark" viewBox="0 0 300 60" preserveAspectRatio="none"></svg>
+      <div class="sub" id="market">—</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:12px">
+    <h3>Carry opportunities — all perps, ranked by persistent (14d) funding</h3>
+    <div id="trading" class="sub" style="margin-bottom:8px">—</div>
+    <table id="opps"></table>
+  </div>
+
+  <div class="card" style="margin-top:12px">
+    <h3>Audit trail</h3>
+    <div id="log" class="log"></div>
+  </div>
+  <p class="sub dim">Auto-refreshes every 5s · paper mode simulates fills · educational, not investment advice</p>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const usd=x=>x==null?'—':'$'+Number(x).toLocaleString(undefined,{maximumFractionDigits:2});
+const btc=x=>(x>=0?'+':'')+Number(x).toFixed(4);
+function cls(x,eps){return Math.abs(x)<(eps||1e-6)?'neu':(x>0?'pos':'neg')}
+
+function sparkline(hist){
+  const svg=$('spark'); svg.innerHTML='';
+  if(!hist||hist.length<2){return}
+  const ys=hist.map(h=>h.equity_usd), lo=Math.min(...ys), hi=Math.max(...ys), rng=(hi-lo)||1;
+  const pts=hist.map((h,i)=>[i/(hist.length-1)*300, 58-(h.equity_usd-lo)/rng*56]);
+  const d=pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
+  const up=ys[ys.length-1]>=ys[0];
+  svg.innerHTML=`<path d="${d}" fill="none" stroke="${up?'#3ddc97':'#ff5d6c'}" stroke-width="2"/>`;
+}
+
+async function tick(){
+  let s; try{ s=await (await fetch('/api/status')).json() }catch(e){ return }
+  $('mode').textContent=s.mode; $('mode').className='badge '+(s.mode==='live'?'b-live':'b-paper');
+  $('venue').textContent=s.venue+' · '+(s.symbol||'BTC');
+  $('updated').textContent='updated '+new Date(s.ts*1000).toLocaleTimeString();
+  $('kill').style.display=s.kill?'block':'none';
+
+  // position banner — pair / state / legs / leverage at a glance
+  const ps=s.position||{};
+  $('posState').textContent=ps.state||'—';
+  $('posPair').innerHTML='<b>'+(ps.pair||'')+'</b> on '+(ps.venue||'');
+  $('posLegs').textContent=ps.engaged?('long '+btc(ps.spot_qty)+' spot / short '+btc(ps.perp_qty)+' perp'):'capital held in cash';
+  $('posLev').innerHTML=ps.engaged
+    ?('leverage <b>'+(ps.leverage||0).toFixed(2)+'×</b> · gross '+usd(ps.gross_notional_usd)+' · net Δ '+usd(ps.net_delta_usd))
+    :'';
+  $('posBanner').style.borderLeftColor=s.kill?'var(--red)':(ps.engaged?'var(--grn)':'var(--amb)');
+
+  const nd=s.paper.net_delta;
+  $('delta').textContent=btc(nd); $('delta').className='big '+cls(nd,1e-3);
+  $('deltaSub').textContent=(s.symbol||'BTC')+(Math.abs(nd)<1e-3?' · NEUTRAL ✓':' · drifting');
+  $('equity').textContent=usd(s.equity);
+  $('funding').textContent=usd(s.paper.funding_usd);
+  $('apr').textContent=(s.market.funding_apr*100).toFixed(2)+'%';
+  $('carry').textContent=s.carry_on?'carry ON (long spot / short perp)':'carry OFF — flat to cash';
+  $('carry').className='sub '+(s.carry_on?'pos':'neg');
+
+  const t=s.target, p=s.paper;
+  let rows=`<tr><td class="mut">leg</td><td class="mut">target</td><td class="mut">actual</td></tr>`+
+    `<tr><td>spot</td><td>${btc(t.spot)}</td><td>${btc(p.spot)}</td></tr>`+
+    `<tr><td>perp</td><td>${btc(t.perp)}</td><td class="neg">${btc(p.perp)}</td></tr>`+
+    `<tr><td>cash</td><td></td><td>${usd(p.cash)}</td></tr>`;
+  if(s.live){ rows+= s.live.error
+    ? `<tr><td>live acct</td><td colspan=2 class="mut">${s.live.error}</td></tr>`
+    : `<tr><td>live acct</td><td class="mut">${s.live.address.slice(0,8)}…</td><td>Δ ${btc(s.live.net_delta)} · ${usd(s.live.equity)}</td></tr>`; }
+  $('book').innerHTML=rows;
+
+  $('market').textContent=`${s.symbol||'BTC'} ${usd(s.market.mark)}`+(s.market.dvol?` · DVOL ${(s.market.dvol*100).toFixed(0)}%`:'');
+  sparkline(s.pnl_history);
+
+  // carry opportunities (all perps, persistent funding) + deployed-vs-best gap
+  const pct=x=>(x>=0?'+':'')+(x*100).toFixed(1)+'%';
+  if(s.opportunities&&s.opportunities.length){
+    const best=s.opportunities[0], dep=s.symbol||'BTC', auto=s.deployed&&s.deployed.auto_rotate;
+    let gap;
+    if(auto){
+      gap = `AUTO-ROTATING — holding <b class="pos">${dep}</b> at ${pct(s.deployed.funding_apr)} (best spot-able persistent carry)`
+        + (best.coin!==dep?` · ${best.coin} ${pct(best.avg_apr)} hotter but excluded (no co-located spot)`:'');
+    } else {
+      gap = best.coin!==dep
+        ? `engine deploys <b>${dep}</b> (FIXED) at ${pct(s.deployed.funding_apr)} · best persistent <b class="pos">${best.coin}</b> ${pct(best.avg_apr)} — not traded`
+        : `engine deploys <b>${dep}</b> — currently the top persistent carry`;
+    }
+    $('trading').innerHTML=gap;
+    let rows=`<tr><td class="mut">coin</td><td class="mut">14d-avg</td><td class="mut">now</td><td class="mut">%hrs+</td><td class="mut">OI</td></tr>`;
+    for(const o of s.opportunities){
+      const dpl=o.coin===dep?' style="background:#16203a"':'';
+      const pf=o.pos_frac==null?'—':(o.pos_frac*100).toFixed(0)+'%';
+      rows+=`<tr${dpl}><td>${o.coin}</td><td class="${o.avg_apr>=0?'pos':'neg'}">${pct(o.avg_apr)}</td><td>${pct(o.now_apr)}</td><td>${pf}</td><td>$${(o.oi_usd/1e6).toFixed(0)}M</td></tr>`;
+    }
+    $('opps').innerHTML=rows;
+  }
+
+  $('log').innerHTML=(s.audit||[]).map(e=>{
+    const tm=new Date(e.ts*1000).toLocaleTimeString();
+    return `<div><span class="mut">${tm}</span> <b>${e.kind}</b> ${(e.data||'').slice(0,120)}</div>`;
+  }).join('');
+}
+tick(); setInterval(tick,5000);
+</script>
+</body>
+</html>

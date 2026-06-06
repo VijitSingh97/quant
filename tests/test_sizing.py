@@ -1,4 +1,4 @@
-from btcvol.core import sizing
+from basis.core import sizing
 
 
 def test_vol_target_halves_when_vol_doubles():

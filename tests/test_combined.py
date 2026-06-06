@@ -1,5 +1,5 @@
-from btcvol.backtests.combined import _date_ms, equity, leg_stats, carry_per_block
-from btcvol.backtests.structures import HOLD
+from basis.backtests.combined import _date_ms, equity, leg_stats, carry_per_block
+from basis.backtests.structures import HOLD
 
 
 def test_date_ms_epoch():

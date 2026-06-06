@@ -1,6 +1,6 @@
 import csv
 
-from btcvol.analyze import column_stats, pearson, pct_true, load_series
+from basis.analyze import column_stats, pearson, pct_true, load_series
 
 
 def test_column_stats_basic():

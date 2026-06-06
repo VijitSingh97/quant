@@ -1,6 +1,6 @@
 #!/bin/zsh
-# Remove the btcvol logger launchd agent.
-LABEL="com.vijit.btcvol.logger"
+# Remove the basis logger launchd agent.
+LABEL="com.vijit.basis.logger"
 DEST="$HOME/Library/LaunchAgents/$LABEL.plist"
 DOMAIN="gui/$(id -u)"
 

@@ -1,6 +1,6 @@
 import math
 
-from btcvol.backtests.structures import simulate_from, HOLD, YEAR
+from basis.backtests.structures import simulate_from, HOLD, YEAR
 
 
 def _synthetic_market(n=65):

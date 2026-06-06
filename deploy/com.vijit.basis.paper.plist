@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd agent: run the PAPER carry engine once an hour (no real money).
+  __ROOT__ is substituted with the project path by scripts/install_live_paper.sh.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.vijit.basis.paper</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/zsh</string>
+        <string>__ROOT__/scripts/run_live_paper.sh</string>
+    </array>
+
+    <key>StartInterval</key>
+    <integer>3600</integer>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>WorkingDirectory</key>
+    <string>__ROOT__</string>
+
+    <key>StandardOutPath</key>
+    <string>__ROOT__/data/paper.out.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>__ROOT__/data/paper.err.log</string>
+</dict>
+</plist>

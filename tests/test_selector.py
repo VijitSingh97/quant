@@ -1,4 +1,4 @@
-from btcvol.live.selector import select_asset
+from basis.live.selector import select_asset
 
 # opportunities: list of {coin, avg_apr, oi_usd, now_apr}
 OPPS = [

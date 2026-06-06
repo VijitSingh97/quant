@@ -1,5 +1,5 @@
 {
-  "_comment": "Example book for `btcvol-book --positions examples/positions.example.json`. qty is signed (negative = short); option qty is in contracts (1 BTC each). Update the option instrument names to live Deribit expiries/strikes.",
+  "_comment": "Example book for `basis-book --positions examples/positions.example.json`. qty is signed (negative = short); option qty is in contracts (1 BTC each). Update the option instrument names to live Deribit expiries/strikes.",
   "spot_btc": 1.0,
   "perps": [
     {"venue": "okx", "qty_btc": -1.0}

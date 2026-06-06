@@ -1,6 +1,6 @@
 import math
 
-from btcvol.core import stats
+from basis.core import stats
 
 
 def test_log_returns():

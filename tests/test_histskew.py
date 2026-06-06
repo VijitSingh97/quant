@@ -1,7 +1,7 @@
 import math
 
-from btcvol.backtests.histskew import simulate_logged, _daily, MIN_ROLLS
-from btcvol.backtests.structures import HOLD
+from basis.backtests.histskew import simulate_logged, _daily, MIN_ROLLS
+from basis.backtests.structures import HOLD
 
 
 def _rows(n, rr25=-0.05, bf25=0.01):

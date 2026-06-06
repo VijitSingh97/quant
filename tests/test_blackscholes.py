@@ -1,6 +1,6 @@
 import math
 
-from btcvol.core import blackscholes as bs
+from basis.core import blackscholes as bs
 
 
 def test_norm_cdf_known_values():

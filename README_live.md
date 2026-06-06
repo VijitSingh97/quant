@@ -1,4 +1,4 @@
-# btcvol.live — execution layer (paper-first)
+# basis.live — execution layer (paper-first)
 
 The bridge from the research toolkit to real, automated, monitored trading of the
 **delta-neutral funding carry** — built safety-first. It runs in **paper mode by
@@ -19,8 +19,8 @@ make live-monitor    # CLI status (positions, net delta, equity, funding) + audi
 make live-web        # web dashboard -> http://localhost:8787
 ```
 
-Each `make X` == `PYTHONPATH=src python3 -m btcvol.live.X` == the console script
-`btcvol-live[-X]` after `pip install -e .` (e.g. `btcvol-live-auto`, `btcvol-live-web`).
+Each `make X` == `PYTHONPATH=src python3 -m basis.live.X` == the console script
+`basis-live[-X]` after `pip install -e .` (e.g. `basis-live-auto`, `basis-live-web`).
 
 Run `live-paper` repeatedly (or scheduled) — it converges to the delta-neutral carry
 (long spot / short perp), stays funding-timed (flat when funding < 0), and accrues
@@ -28,10 +28,15 @@ simulated funding so you can watch the strategy earn.
 
 ## Web dashboard (`make live-web` → http://localhost:8787)
 
-A dependency-free single-page dashboard (stdlib `http.server`): mode/venue badge,
-**net-delta** indicator (green when neutral), equity, funding earned, live funding
-rate (carry ON/OFF), target-vs-actual book, an equity sparkline, the read-only live
-account (if configured), and the live **audit trail** — auto-refreshing every 5s.
+A dependency-free single-page dashboard (stdlib `http.server`). Up top, a **position
+banner** states plainly what we're in right now — the **pair** (`BTC-SPOT / BTC-PERP`),
+the **state** (DEPLOYED / FLAT / HALTED), the **legs**, the **leverage** and gross
+notional, and net delta — colour-coded (green deployed-neutral, amber flat, red halted).
+Below it: mode/venue badge, net-delta indicator, equity, funding earned, live funding
+rate (carry ON/OFF), target-vs-actual book, an equity sparkline, the cross-asset
+carry-opportunities panel, the read-only live account (if configured), and the live
+**audit trail** — auto-refreshing every 5s. The CLI (`make live-monitor`) shows the
+same POSITION block in text.
 
 ## Scheduled paper trading (Phase 2 — done)
 
@@ -63,18 +68,18 @@ Two ways to deploy:
 
 **Fixed asset** — you choose, engine holds it (own book per asset; USD-based limits):
 ```bash
-BTCVOL_SYMBOL=ETH make live-paper      # deploy the carry on ETH instead of BTC
+BASIS_SYMBOL=ETH make live-paper      # deploy the carry on ETH instead of BTC
 ```
 
 **Auto-select (rotating carry)** — the engine picks the best asset from the scan itself:
 ```bash
 make live-auto                          # paper; own book data/live_auto.db
-BTCVOL_DB=live_auto.db make live-web    # view the auto book in the dashboard
+BASIS_DB=live_auto.db make live-web    # view the auto book in the dashboard
 ```
-The auto allocator (`btcvol.live.auto` → `selector.py`) ranks markets by **persistent**
+The auto allocator (`basis.live.auto` → `selector.py`) ranks markets by **persistent**
 (14d-avg) funding, requires a **liquidity floor** and a **spot-able universe**
-(`BTCVOL_AUTO_SPOT_UNIVERSE`, default BTC/ETH/SOL/HYPE — `=ANY` to allow alts you can
-source spot for), and applies **hysteresis** (`BTCVOL_AUTO_SWITCH_MARGIN`, default 5%):
+(`BASIS_AUTO_SPOT_UNIVERSE`, default BTC/ETH/SOL/HYPE — `=ANY` to allow alts you can
+source spot for), and applies **hysteresis** (`BASIS_AUTO_SWITCH_MARGIN`, default 5%):
 it only rotates off the held asset when a candidate beats it by the margin, or the held
 asset stops qualifying — so it doesn't churn on hourly funding noise. Every rotation and
 order is risk-gated and audited. Example: it deploys **HYPE** (~+14% persistent, has HL
@@ -93,11 +98,11 @@ Set your Hyperliquid wallet **address** (public, no secret) to see your real acc
 read-only in the monitor and the web dashboard:
 
 ```bash
-export BTCVOL_HL_ADDRESS=0xYourHyperliquidAddress
+export BASIS_HL_ADDRESS=0xYourHyperliquidAddress
 make live-monitor      # now shows your real positions/equity alongside the paper book
 ```
 
-## Architecture (`src/btcvol/live/`)
+## Architecture (`src/basis/live/`)
 
 ```
 config.py        mode (PAPER default), venue, capital, hard risk limits — all via env
@@ -105,27 +110,35 @@ store.py         SQLite audit store: events · orders · fills · positions · p
 risk.py          pre-trade gate every order must pass + the kill switch
 allocator.py     delta-neutral carry target (funding-timed)
 engine.py        reconcile target vs actual -> risk-gated orders -> (paper) fills -> audit
-monitor.py       read-only book status + recent audit trail
+status.py        shared status assembler (one source of truth for CLI + web)
+selector.py      auto asset-selection (persistent funding + hysteresis)
+auto.py          auto-rotating allocator (own book)
+monitor.py · web.py · dashboard.html   CLI + web tracker
 exchanges/
   base.py        ExchangeClient interface + Order
   paper.py       simulates fills at the live mark (default)
   hyperliquid.py read-only first (public data + account-by-address); live orders gated
 ```
 
-**Safety invariants:** paper unless `BTCVOL_MODE=live`; every order passes `risk.py`
+**Safety invariants:** paper unless `BASIS_MODE=live`; every order passes `risk.py`
 (max notional / leverage / order size / net-delta band); a `data/KILL_SWITCH` file
 halts all trading instantly; every signal, intent, block, and fill is logged
 append-only to `data/live.db`.
 
 ## Risk limits (env-overridable)
 
+Limits are **USD-denominated** so they're asset-agnostic (the engine rotates across
+assets). Env vars are read as `BASIS_*` and fall back to the legacy `BTCVOL_*` names,
+so an existing `.env` keeps working after the rename.
+
 | Limit | Default | Env |
 |---|---|---|
-| Max notional | $10,000 | `BTCVOL_MAX_NOTIONAL_USD` |
-| Max leverage | 2.0× | `BTCVOL_MAX_LEVERAGE` |
-| Max order | 0.05 BTC | `BTCVOL_MAX_ORDER_BTC` |
-| Net-delta band | ±0.02 BTC | `BTCVOL_MAX_ABS_DELTA_BTC` |
-| Capital / deploy | 0.1 BTC / 85% | `BTCVOL_CAPITAL_BTC`, `BTCVOL_DEPLOY_FRACTION` |
+| Max notional | $10,000 | `BASIS_MAX_NOTIONAL_USD` |
+| Max leverage | 2.0× | `BASIS_MAX_LEVERAGE` |
+| Max order | $3,000 | `BASIS_MAX_ORDER_USD` |
+| Min order | $10 | `BASIS_MIN_ORDER_USD` |
+| Net-delta band | ±$1,200 | `BASIS_MAX_ABS_DELTA_USD` |
+| Capital / deploy | 0.1 BTC / 85% | `BASIS_CAPITAL_BTC`, `BASIS_DEPLOY_FRACTION` |
 | Kill switch | `data/KILL_SWITCH` | — |
 
 ## The phased path to real money
@@ -133,9 +146,9 @@ append-only to `data/live.db`.
 | Phase | Command | Needs | Your money | Status |
 |---|---|---|---|---|
 | **0. Paper** | `make live-paper` / `live-web` | nothing | none | ✅ done |
-| **1. Read-only live** | `BTCVOL_HL_ADDRESS=0x… make live-monitor` | HL wallet *address* (no secret) | none | ✅ done |
+| **1. Read-only live** | `BASIS_HL_ADDRESS=0x… make live-monitor` | HL wallet *address* (no secret) | none | ✅ done |
 | **2. Paper, scheduled** | `./scripts/install_live_paper.sh` | nothing | none | ✅ done |
-| **3. Live, tiny** | `BTCVOL_MODE=live` + agent key | HL **agent wallet** (cannot withdraw) | a fraction of 0.1 BTC | ⏳ needs your key |
+| **3. Live, tiny** | `BASIS_MODE=live` + agent key | HL **agent wallet** (cannot withdraw) | a fraction of 0.1 BTC | ⏳ needs your key |
 | **4. Scaled** | same, caps raised | — | scales as it proves out | — |
 
 **Funding:** you deposit USDC/BTC into your own Hyperliquid account; the system

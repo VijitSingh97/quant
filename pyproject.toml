@@ -3,47 +3,47 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "btcvol"
+name = "basis"
 version = "0.1.0"
-description = "BTC volatility & funding-carry research toolkit (stdlib-only)"
+description = "Market-neutral crypto carry & volatility toolkit (stdlib-only)"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
 authors = [{ name = "vijit" }]
-keywords = ["bitcoin", "volatility", "funding", "carry", "quant", "backtest"]
+keywords = ["crypto", "funding", "carry", "basis-trade", "perpetuals", "delta-neutral", "volatility", "quant", "backtest"]
 dependencies = []   # intentionally stdlib-only
 
 [project.optional-dependencies]
 dev = ["pytest>=7"]
 
 [project.scripts]
-btcvol-dashboard  = "btcvol.dashboard:main"
-btcvol-monitor    = "btcvol.monitor:main"
-btcvol-carry      = "btcvol.backtests.carry:main"
-btcvol-vrp        = "btcvol.backtests.vrp:main"
-btcvol-combined   = "btcvol.backtests.combined:main"
-btcvol-histskew   = "btcvol.backtests.histskew:main"
-btcvol-robust     = "btcvol.backtests.robustness:main"
-btcvol-condor-bt  = "btcvol.backtests.structures:main"
-btcvol-structures = "btcvol.structures:main"
-btcvol-skew       = "btcvol.skew:main"
-btcvol-book       = "btcvol.book:main"
-btcvol-size       = "btcvol.size:main"
-btcvol-analyze    = "btcvol.analyze:main"
-btcvol-macro      = "btcvol.macro:main"
-btcvol-backfill   = "btcvol.backfill:main"
-btcvol-carry-scan = "btcvol.carryscan:main"
-btcvol-log        = "btcvol.logger:main"
-btcvol-live       = "btcvol.live.engine:main"
-btcvol-live-monitor = "btcvol.live.monitor:main"
-btcvol-live-web   = "btcvol.live.web:main"
-btcvol-live-auto  = "btcvol.live.auto:main"
+basis-dashboard  = "basis.dashboard:main"
+basis-monitor    = "basis.monitor:main"
+basis-carry      = "basis.backtests.carry:main"
+basis-vrp        = "basis.backtests.vrp:main"
+basis-combined   = "basis.backtests.combined:main"
+basis-histskew   = "basis.backtests.histskew:main"
+basis-robust     = "basis.backtests.robustness:main"
+basis-condor-bt  = "basis.backtests.structures:main"
+basis-structures = "basis.structures:main"
+basis-skew       = "basis.skew:main"
+basis-book       = "basis.book:main"
+basis-size       = "basis.size:main"
+basis-analyze    = "basis.analyze:main"
+basis-macro      = "basis.macro:main"
+basis-backfill   = "basis.backfill:main"
+basis-carry-scan = "basis.carryscan:main"
+basis-log        = "basis.logger:main"
+basis-live       = "basis.live.engine:main"
+basis-live-monitor = "basis.live.monitor:main"
+basis-live-web   = "basis.live.web:main"
+basis-live-auto  = "basis.live.auto:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-"btcvol.live" = ["*.html"]
+"basis.live" = ["*.html"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

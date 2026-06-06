@@ -1,7 +1,7 @@
 import pytest
 
-from btcvol.core.assets import get_asset, ASSETS, get_macro, MACRO_ASSETS
-from btcvol.backtests.structures import _nice_grid
+from basis.core.assets import get_asset, ASSETS, get_macro, MACRO_ASSETS
+from basis.backtests.structures import _nice_grid
 
 
 def test_btc_default_and_has_dvol():
