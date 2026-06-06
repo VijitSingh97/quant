@@ -50,3 +50,21 @@ def test_skew_iv_atm_is_atm():
     coeffs = (1.0, -0.12, 0.07)
     atm = 0.5
     assert abs(sf.skew_iv(coeffs, atm, 30 / 365, 60000, 60000) - atm) < 1e-9
+
+
+def _synthetic_surface():
+    return {"S": 60000, "expiries": [
+        {"name": "A", "dte": 7, "atm": 0.60, "rr25": -0.10, "bf25": 0.02},
+        {"name": "B", "dte": 30, "atm": 0.50, "rr25": -0.08, "bf25": 0.015},
+        {"name": "C", "dte": 90, "atm": 0.45, "rr25": -0.05, "bf25": 0.01},
+    ]}
+
+
+def test_summary_metrics_picks_ref_and_slope():
+    m = sf.summary_metrics(_synthetic_surface(), ref_dte=30)
+    assert m["atm_iv"] == 0.50 and m["rr25"] == -0.08 and m["bf25"] == 0.015
+    assert abs(m["term_slope"] - (0.45 - 0.60)) < 1e-12     # ~90d ATM minus front ATM
+
+
+def test_summary_metrics_empty_surface():
+    assert sf.summary_metrics({"S": 60000, "expiries": []}) == {}

@@ -130,3 +130,17 @@ def skew_iv(coeffs, atm, T, K, S):
         return atm
     x = math.log(K / S) / (atm * math.sqrt(T))
     return max(0.05, atm * (a0 + a1 * x + a2 * x * x))
+
+
+def summary_metrics(surface, ref_dte=30):
+    """Headline surface metrics for logging: ATM, RR25, BF25 at ~ref_dte, plus the
+    ATM term-structure slope (~90d minus front). Returns {} if the surface is empty."""
+    exps = [e for e in surface["expiries"] if e["atm"]]
+    if not exps:
+        return {}
+    ref = min(exps, key=lambda e: abs(e["dte"] - ref_dte))
+    near90 = min(exps, key=lambda e: abs(e["dte"] - 90))
+    front = min(exps, key=lambda e: e["dte"])
+    slope = (near90["atm"] - front["atm"]) if (near90["atm"] and front["atm"]) else None
+    return {"atm_iv": ref["atm"], "rr25": ref["rr25"], "bf25": ref["bf25"],
+            "ref_dte": ref["dte"], "term_slope": slope}
