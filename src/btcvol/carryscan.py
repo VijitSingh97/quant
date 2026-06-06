@@ -74,6 +74,9 @@ def run(min_oi_musd=10.0, top=15):
               f"— but you'd need spot {best_liquid['coin']} elsewhere to be delta-neutral, and alt funding flips fast.")
     print("• Deploy to the best LIQUID asset you can hold spot for; don't chase microcap funding (it's a trap).")
     print("• Funding is hourly and mean-reverting — re-scan before rotating, and don't churn on noise.")
+    print("• BTC-NUMERAIRE WARNING: to accrue BTC, carrying a non-BTC asset means parking capital in")
+    print("  USDC/alt = implicitly SHORT BTC. It only out-accrues BTC if its funding edge beats BTC's")
+    print("  own drift. BTC-collateralized BTC-carry keeps you in BTC; alt-carry is a short-BTC-for-yield bet.")
 
 
 def main():
