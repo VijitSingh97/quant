@@ -19,7 +19,8 @@ MIN_CORR_N = 20
 
 NUMERIC = ["spot", "ret_30d", "rv_7d", "rv_30d", "dvol", "vrp", "okx_funding_apr",
            "hl_funding_apr", "okx_perp_premium_bps", "basis_near_ann_pct",
-           "oi_total_usd", "atm_iv", "rr25", "bf25", "term_slope"]
+           "oi_total_usd", "atm_iv", "rr25", "bf25", "term_slope",
+           "rr10", "bf10", "pc_oi_ratio"]
 
 
 def load_series(path):
@@ -101,6 +102,10 @@ def main():
         print(f"  RR25 mean {fmt_vol(statistics.mean(rr))}  put-skewed {pct_true(rr, lambda x: x < 0):.0f}% of rows"
               + (f"   BF25 mean {fmt_vol(bf['mean'])}" if bf else "")
               + (f"   term-slope mean {fmt_vol(ts['mean'])}" if ts else ""))
+        rr10v, pcoi = _vals(rows, "rr10"), _vals(rows, "pc_oi_ratio")
+        if rr10v:
+            print(f"  RR10 (tail) mean {fmt_vol(statistics.mean(rr10v))}"
+                  + (f"   put/call OI mean {statistics.mean(pcoi):.2f}" if pcoi else ""))
     else:
         print(f"\nSKEW: not captured in this window (added by issue #1 — accrues going forward).")
 

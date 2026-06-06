@@ -112,6 +112,8 @@ def deribit_option_chain(currency="BTC", index_name="btc_usd"):
             "mark_btc": s.get("mark_price"),
             "bid_btc": s.get("bid_price"),
             "ask_btc": s.get("ask_price"),
+            "oi": s.get("open_interest"),
+            "volume": s.get("volume"),
         })
     return {"index": index, "options": opts}
 

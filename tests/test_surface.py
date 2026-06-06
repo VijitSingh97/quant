@@ -68,3 +68,15 @@ def test_summary_metrics_picks_ref_and_slope():
 
 def test_summary_metrics_empty_surface():
     assert sf.summary_metrics({"S": 60000, "expiries": []}) == {}
+
+
+def test_summary_metrics_tail_skew_and_pc_oi():
+    surf = {"S": 60000, "expiries": [
+        {"name": "B", "dte": 30, "atm": 0.50, "rr25": -0.08, "bf25": 0.01,
+         "rr10": -0.15, "bf10": 0.03,
+         "options": [{"type": "P", "oi": 30}, {"type": "P", "oi": 30}, {"type": "C", "oi": 40}]},
+        {"name": "C", "dte": 90, "atm": 0.45, "rr25": -0.05, "bf25": 0.01, "options": []},
+    ]}
+    m = sf.summary_metrics(surf, ref_dte=30)
+    assert m["rr10"] == -0.15 and m["bf10"] == 0.03                 # tail skew from ref expiry
+    assert abs(m["pc_oi_ratio"] - (60 / 40)) < 1e-9                 # 60 put OI / 40 call OI

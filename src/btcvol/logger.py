@@ -23,7 +23,8 @@ CSV_PATH = DATA_DIR / "timeseries.csv"      # BTC series (default); other assets
 FIELDS = ["iso_time", "unix", "spot", "ret_30d", "rv_7d", "rv_30d", "dvol", "vrp",
           "okx_funding_apr", "hl_funding_apr", "okx_perp_premium_bps",
           "basis_near_ann_pct", "oi_total_usd",
-          "atm_iv", "rr25", "bf25", "term_slope"]
+          "atm_iv", "rr25", "bf25", "term_slope",
+          "rr10", "bf10", "pc_oi_ratio"]
 
 
 def csv_path_for(asset):
@@ -73,6 +74,9 @@ def collect(asset="BTC"):
         "rr25": _r(sm.get("rr25"), 4),
         "bf25": _r(sm.get("bf25"), 4),
         "term_slope": _r(sm.get("term_slope"), 4),
+        "rr10": _r(sm.get("rr10"), 4),
+        "bf10": _r(sm.get("bf10"), 4),
+        "pc_oi_ratio": _r(sm.get("pc_oi_ratio"), 3),
     }
 
 

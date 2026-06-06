@@ -62,13 +62,15 @@ def build_surface(chain):
         atm = iv_at_strike(grp, S)
         otm_puts = [o for o in grp if o["type"] == "P" and o["strike"] <= S]
         otm_calls = [o for o in grp if o["type"] == "C" and o["strike"] >= S]
-        put25 = iv_at_delta(otm_puts, 0.25)
-        call25 = iv_at_delta(otm_calls, 0.25)
+        put25, call25 = iv_at_delta(otm_puts, 0.25), iv_at_delta(otm_calls, 0.25)
+        put10, call10 = iv_at_delta(otm_puts, 0.10), iv_at_delta(otm_calls, 0.10)
         rec = {
             "name": grp[0]["instrument"].split("-")[1], "dte": dte, "T": dte / 365.0,
-            "atm": atm, "put25": put25, "call25": call25,
+            "atm": atm, "put25": put25, "call25": call25, "put10": put10, "call10": call10,
             "rr25": (call25 - put25) if (put25 and call25) else None,
             "bf25": ((call25 + put25) / 2 - atm) if (put25 and call25 and atm) else None,
+            "rr10": (call10 - put10) if (put10 and call10) else None,      # tail skew
+            "bf10": ((call10 + put10) / 2 - atm) if (put10 and call10 and atm) else None,
             "n": len(grp), "options": grp,
         }
         expiries.append(rec)
@@ -142,5 +144,10 @@ def summary_metrics(surface, ref_dte=30):
     near90 = min(exps, key=lambda e: abs(e["dte"] - 90))
     front = min(exps, key=lambda e: e["dte"])
     slope = (near90["atm"] - front["atm"]) if (near90["atm"] and front["atm"]) else None
+    # put/call open-interest ratio across the whole chain (positioning skew)
+    put_oi = sum(o.get("oi") or 0 for e in exps for o in e.get("options", []) if o["type"] == "P")
+    call_oi = sum(o.get("oi") or 0 for e in exps for o in e.get("options", []) if o["type"] == "C")
+    pc_oi = (put_oi / call_oi) if call_oi else None
     return {"atm_iv": ref["atm"], "rr25": ref["rr25"], "bf25": ref["bf25"],
+            "rr10": ref.get("rr10"), "bf10": ref.get("bf10"), "pc_oi_ratio": pc_oi,
             "ref_dte": ref["dte"], "term_slope": slope}
