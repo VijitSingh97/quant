@@ -56,6 +56,7 @@ A `Makefile` wraps the common commands: `make dashboard`, `make monitor`,
 | `btcvol.structures` / `btcvol-structures` | Builds **defined-risk** short-vol structures (iron condor, put/call credit spreads) from the live Deribit chain. Prices legs conservatively (sell at bid, buy wings at ask) and reports max loss, breakevens, probability of profit (BS under implied), expected value under realized, and an ASCII payoff diagram. Flags: `--dte`, `--delta`, `--wing`. |
 | `btcvol.skew` / `btcvol-skew` | Reads the live implied-vol **surface**: per-expiry ATM/25Δ vols, risk-reversal (RR25) and butterfly (BF25), the ATM term structure (contango/backwardation), an ASCII smile, and a fitted parametric skew shape that the condor backtest reuses. |
 | `btcvol.monitor` / `btcvol-monitor` | Live perp funding across 4 venues, normalized to APR, plus the cross-venue spread / arb flag. |
+| `btcvol.size` / `btcvol-size` | **Position sizer.** Vol-target scale (halve size when vol doubles) + fractional-Kelly stake from a win-rate/payoff. Flags: `--target-vol`, `--position-vol`, `--win-prob`, `--win-loss`. |
 | `btcvol.book` / `btcvol-book` | **Delta-neutral book monitor.** Reads a positions file (spot/perp/option legs), prices each leg's delta off the live chain, reports net delta (BTC + USD), and suggests the perp hedge to flatten. `--threshold`, `--strict` (exit nonzero on drift). See `examples/positions.example.json`. |
 | `btcvol.analyze` / `btcvol-analyze` | Summarizes our **own captured** `data/timeseries.csv`: VRP, funding, skew (RR25/BF25), basis/OI distributions and exploratory correlations. Degrades gracefully with little history. |
 | `btcvol.logger` / `btcvol-log` | Appends one compact metrics row to `data/timeseries.csv` (spot, RV, DVOL, VRP, funding, basis, OI, and the IV-surface **ATM/RR25/BF25/term-slope** — skew has no public historical source, so we capture our own). The launchd target; migrates the CSV schema in place when columns are added. |
@@ -87,6 +88,7 @@ quant/
 │   ├── monitor.py            cross-venue funding monitor
 │   ├── structures.py         defined-risk option structures vs live chain
 │   ├── skew.py               live implied-vol surface / skew reader
+│   ├── size.py               position sizer (vol-target + fractional Kelly)
 │   ├── book.py               delta-neutral book monitor (net-delta drift)
 │   ├── analyze.py            analyze our own captured timeseries.csv
 │   ├── logger.py             compact CSV time-series logger (launchd target)
@@ -100,6 +102,7 @@ quant/
 │       ├── stats.py          vol math: cc/parkinson vol, sharpe, drawdown
 │       ├── blackscholes.py   BS pricing, delta, strike-from-delta, prob/EV
 │       ├── surface.py        IV surface: smile metrics, interpolation, skew fit
+│       ├── sizing.py         vol-target + fractional-Kelly sizing
 │       ├── format.py         fmt_pct / fmt_vol / sparkline
 │       ├── sources.py        all exchange data pulls (incl. option chain)
 │       └── paths.py          project-root-anchored data dir
@@ -190,6 +193,9 @@ offline — no network calls.
   from the condor leg. Combined Sharpe (~1.2) sits below carry-only's (~3.4) — but
   carry's Sharpe is *flattered* (its liquidation tail isn't in the curve). Legs are
   only mildly correlated (r≈+0.3): both prefer calm, so the hedge between them is partial.
+- **Vol-targeting the condor risk** (`--vol-target`, size down when realized vol is high)
+  cut combined max drawdown roughly in half (~−15% → ~−8%) and lifted combined Sharpe
+  (~1.2 → ~1.7) for similar return — sizing, not selection, did that.
 
 **Takeaway:** both edges are real but tail-driven, and **skew makes defined-risk
 selling less generous than flat-vol intuition suggests**. The combined book is the
@@ -206,4 +212,5 @@ strategy: carry base + filtered defined-risk condor overlay, vol-targeted, never
 - ~~Delta-neutral book monitor~~ — done (`btcvol.book`, [#3](https://github.com/VijitSingh97/quant/issues/3))
 - ~~Analyze strategies on our own captured `timeseries.csv`~~ — done (`btcvol.analyze`, [#2](https://github.com/VijitSingh97/quant/issues/2)); grows useful as history accrues
 - ~~Combined-book backtest (carry + filtered condor as one strategy)~~ — done (`btcvol.backtests.combined`, [#5](https://github.com/VijitSingh97/quant/issues/5))
-- Open issues: [#6](https://github.com/VijitSingh97/quant/issues/6) historical-skew backtest (blocked on [#4](https://github.com/VijitSingh97/quant/issues/4) data) · [#7](https://github.com/VijitSingh97/quant/issues/7) robustness/anti-overfit · [#8](https://github.com/VijitSingh97/quant/issues/8) position sizer (vol-target + fractional Kelly)
+- ~~Position sizer (vol-target + fractional Kelly)~~ — done (`btcvol.size` + `core.sizing`, [#8](https://github.com/VijitSingh97/quant/issues/8)); wired into the combined book via `--vol-target`
+- Open issues: [#6](https://github.com/VijitSingh97/quant/issues/6) historical-skew backtest (blocked on [#4](https://github.com/VijitSingh97/quant/issues/4) data) · [#7](https://github.com/VijitSingh97/quant/issues/7) robustness/anti-overfit (param sweep, walk-forward, costs)

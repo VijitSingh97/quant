@@ -1,6 +1,6 @@
 PY := PYTHONPATH=src python3
 
-.PHONY: help install dev test dashboard monitor carry vrp combined condor-bt structures skew book analyze log launchd-install launchd-uninstall clean
+.PHONY: help install dev test dashboard monitor carry vrp combined condor-bt structures skew book size analyze log launchd-install launchd-uninstall clean
 
 help:
 	@echo "make install            editable install (pip install -e .)"
@@ -15,6 +15,7 @@ help:
 	@echo "make structures         defined-risk option structures vs live chain"
 	@echo "make skew               read the live implied-vol surface / skew"
 	@echo "make book               delta-neutral book monitor (net-delta drift)"
+	@echo "make size               position sizer (vol-target + fractional Kelly)"
 	@echo "make analyze            analyze our own captured data/timeseries.csv"
 	@echo "make log                append one row to data/timeseries.csv"
 	@echo "make launchd-install    install the hourly logger launchd agent"
@@ -55,6 +56,9 @@ skew:
 
 book:
 	$(PY) -m btcvol.book
+
+size:
+	$(PY) -m btcvol.size
 
 analyze:
 	$(PY) -m btcvol.analyze

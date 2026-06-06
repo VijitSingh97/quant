@@ -18,7 +18,7 @@ import calendar
 import statistics
 import time
 
-from ..core import sharpe, max_drawdown, pearson, sparkline, fmt_pct
+from ..core import sharpe, max_drawdown, pearson, sparkline, fmt_pct, fmt_vol, vol_target_scale
 from ..core.sources import deribit_funding_history
 from .structures import simulate, HOLD, ROLLS_PER_YEAR
 
@@ -57,7 +57,7 @@ def _row(name, s):
     return f"  {name:14} {fmt_pct(s['total']):>9} {fmt_pct(s['cagr']):>9} {sh:>8} {fmt_pct(s['mdd']):>9}"
 
 
-def run(leverage=3.0, risk=0.15, skew=True):
+def run(leverage=3.0, risk=0.15, skew=True, vol_target=None):
     sim = simulate(skew=skew)
     rolls = sim["filtered"]                       # the viable variant (DVOL>RV filtered)
     if not rolls:
@@ -66,14 +66,20 @@ def run(leverage=3.0, risk=0.15, skew=True):
     funding = deribit_funding_history("BTC-PERPETUAL", days=420)
 
     carry = carry_per_block(rolls, funding, leverage)
-    condor = [risk * r["ror"] for r in rolls]
+    # condor risk per block: fixed, or vol-targeted (size down when trailing RV is high)
+    def block_risk(r):
+        if vol_target and r["rv_trail"]:
+            return risk * vol_target_scale(vol_target, r["rv_trail"], max_scale=1.5)
+        return risk
+    condor = [block_risk(r) * r["ror"] for r in rolls]
     port = [c + d for c, d in zip(carry, condor)]
 
     sc, sd, sp = leg_stats(carry), leg_stats(condor), leg_stats(port)
     corr = pearson(carry, condor)
 
     bar = "=" * 78
-    print(f"\n{bar}\nCOMBINED-BOOK BACKTEST  (carry {leverage:.0f}x  +  filtered condor {risk:.0%} risk/roll)\n{bar}")
+    vt = f"  vol-targeted to {fmt_vol(vol_target)}" if vol_target else ""
+    print(f"\n{bar}\nCOMBINED-BOOK BACKTEST  (carry {leverage:.0f}x  +  filtered condor {risk:.0%} risk/roll{vt})\n{bar}")
     print(f"window {sim['dates'][0]} -> {sim['dates'][-1]}   {len(rolls)} blocks   condor: {sim['skew_note']}")
     print(f"\n  {'book':14} {'total':>9} {'CAGR':>9} {'Sharpe':>8} {'maxDD':>9}")
     print(_row("carry-only", sc))
@@ -106,8 +112,9 @@ def main():
     ap.add_argument("--leverage", type=float, default=3.0, help="carry leg leverage (default 3)")
     ap.add_argument("--risk", type=float, default=0.15, help="condor capital fraction risked per roll (default 0.15)")
     ap.add_argument("--flat", action="store_true", help="price the condor flat-vol (default: real skew)")
+    ap.add_argument("--vol-target", type=float, default=None, help="vol-target the condor risk to this annualized vol (e.g. 0.15)")
     args = ap.parse_args()
-    run(leverage=args.leverage, risk=args.risk, skew=not args.flat)
+    run(leverage=args.leverage, risk=args.risk, skew=not args.flat, vol_target=args.vol_target)
 
 
 if __name__ == "__main__":

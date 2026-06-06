@@ -7,6 +7,7 @@ from .format import fmt_pct, fmt_vol, sparkline
 from .paths import PROJECT_ROOT, DATA_DIR
 from .blackscholes import (norm_cdf, bs_price, bs_delta, strike_for_delta,
                            prob_between, lognormal_pdf, expected_payoff)
+from .sizing import vol_target_scale, kelly_fraction, fractional_kelly
 from . import sources
 
 __all__ = [
@@ -16,5 +17,6 @@ __all__ = [
     "fmt_pct", "fmt_vol", "sparkline",
     "norm_cdf", "bs_price", "bs_delta", "strike_for_delta",
     "prob_between", "lognormal_pdf", "expected_payoff",
+    "vol_target_scale", "kelly_fraction", "fractional_kelly",
     "PROJECT_ROOT", "DATA_DIR", "sources",
 ]
