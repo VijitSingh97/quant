@@ -11,10 +11,12 @@ requires-python = ">=3.9"
 license = { text = "MIT" }
 authors = [{ name = "vijit" }]
 keywords = ["crypto", "funding", "carry", "basis-trade", "perpetuals", "delta-neutral", "volatility", "quant", "backtest"]
-dependencies = []   # intentionally stdlib-only
+dependencies = []   # intentionally stdlib-only (research + paper need NOTHING extra)
 
 [project.optional-dependencies]
 dev = ["pytest>=7"]
+# Only needed to sign/submit LIVE Hyperliquid orders (Phase 3). Paper/research never use these.
+live = ["hyperliquid-python-sdk>=0.9.0", "eth-account>=0.10.0"]
 
 [project.scripts]
 basis-dashboard  = "basis.dashboard:main"
@@ -37,6 +39,7 @@ basis-rotation   = "basis.backtests.rotation:main"
 basis-regime     = "basis.backtests.regime:main"
 basis-validate   = "basis.live.validate:cli"
 basis-tune       = "basis.live.tune:cli"
+basis-preflight  = "basis.live.preflight:main"
 basis-log        = "basis.logger:main"
 basis-live       = "basis.live.engine:main"
 basis-live-monitor = "basis.live.monitor:main"

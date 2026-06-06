@@ -51,7 +51,38 @@ class HyperliquidClient(ExchangeClient):
         st = http_post(INFO, {"type": "clearinghouseState", "user": self.address})
         return float(st.get("marginSummary", {}).get("accountValue", 0.0))
 
+    def _signer(self):
+        """Build the HL exchange signer from the agent key. Lazy import: the crypto deps
+        (eth_account + hyperliquid-python-sdk) are the OPTIONAL `[live]` extra — everything
+        else stays stdlib-only. The agent/API wallet CANNOT withdraw by design."""
+        if not config.HL_API_SECRET:
+            raise RuntimeError("set BASIS_HL_API_SECRET (agent-wallet key, withdraw-disabled) for live")
+        try:
+            from eth_account import Account
+            from hyperliquid.exchange import Exchange
+            from hyperliquid.utils import constants
+        except ImportError as e:
+            raise RuntimeError('live trading needs the signer deps: pip install -e ".[live]"') from e
+        wallet = Account.from_key(config.HL_API_SECRET)
+        return Exchange(wallet, constants.MAINNET_API_URL, account_address=self.address or wallet.address)
+
     def place_order(self, order):
-        raise RuntimeError(
-            "live order placement is not enabled (Phase 3). Requires BASIS_MODE=live and an "
-            "agent/API-wallet signer (which cannot withdraw). Paper mode simulates fills instead.")
+        # Triple gate so live trading can never happen by accident:
+        if not config.LIVE:
+            raise RuntimeError("place_order called outside live mode (paper sim should be used)")
+        if config.KILL_FILE.exists():
+            raise RuntimeError("KILL_SWITCH active — refusing to place a live order")
+        if not config.LIVE_ARM:
+            raise RuntimeError("live mode is NOT armed — set BASIS_LIVE_ARM=1 to send REAL orders "
+                               "(deliberate two-step; run `basis-preflight` first)")
+        # NOTE: this submission path is UNTESTED against the live venue (it cannot be tested
+        # without placing real orders). Verify your FIRST order in the Hyperliquid UI before
+        # trusting the loop — tick/lot rounding and spot-asset naming are venue-specific.
+        ex = self._signer()
+        is_buy = order.side == "buy"
+        mark = self.mark_price(order.symbol)
+        slip = config.SLIPPAGE_BPS / 1e4
+        px = round(mark * (1 + slip) if is_buy else mark * (1 - slip), 6)      # marketable IOC limit
+        coin = order.symbol if order.leg == "perp" else f"{order.symbol}/USDC"  # spot pair name
+        resp = ex.order(coin, is_buy, order.qty, px, {"limit": {"tif": "Ioc"}})
+        return {"status": "submitted", "price": px, "qty": order.qty, "resp": resp}

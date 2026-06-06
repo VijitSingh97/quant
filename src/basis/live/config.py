@@ -49,6 +49,9 @@ def _i(name, default):
 # --- mode / venue (live requires a deliberate opt-in) ---
 MODE = _env("MODE", "paper").lower()                       # "paper" | "live"
 LIVE = MODE == "live"
+# Second gate: even in live mode, NO real order is sent unless explicitly armed. This makes
+# accidental live trading impossible — you must set BOTH mode=live AND arm=1.
+LIVE_ARM = _env("LIVE_ARM", "0") == "1"
 VENUE = _env("VENUE", "hyperliquid").lower()
 
 # Read-only Hyperliquid account address (public clearinghouseState — no secret needed)

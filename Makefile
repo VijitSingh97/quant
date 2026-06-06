@@ -1,6 +1,6 @@
 PY := PYTHONPATH=src python3
 
-.PHONY: help install dev test test-integration dashboard monitor carry vrp combined histskew robust condor-bt structures skew book size analyze macro backfill carry-scan rotation regime validate tune histskew2 live-paper live-auto live-monitor live-web log launchd-install launchd-uninstall live-auto-install live-auto-uninstall docker-up docker-down docker-logs clean
+.PHONY: help install dev test test-integration dashboard monitor carry vrp combined histskew robust condor-bt structures skew book size analyze macro backfill carry-scan rotation regime validate tune preflight histskew2 live-paper live-auto live-monitor live-web log launchd-install launchd-uninstall live-auto-install live-auto-uninstall docker-up docker-down docker-logs clean
 
 help:
 	@echo "make install            editable install (pip install -e .)"
@@ -27,6 +27,7 @@ help:
 	@echo "make regime             regime study: carry vs vol allocation by regime (#17)"
 	@echo "make validate           run the self-validation report now (-> research.db)"
 	@echo "make tune               list tuning suggestions (apply: basis-tune --apply <id>)"
+	@echo "make preflight          live-readiness go/no-go check (places NO orders)"
 	@echo "make histskew2          condor with REAL historical skew (Tardis) vs static"
 	@echo "make live-paper         run one paper reconcile cycle (carry, no real money)"
 	@echo "make live-auto          auto-select the best persistent-carry asset and rotate (paper)"
@@ -112,6 +113,9 @@ validate:
 
 tune:
 	$(PY) -m basis.live.tune --list
+
+preflight:
+	-$(PY) -m basis.live.preflight
 
 histskew2:
 	$(PY) -m basis.backtests.structures --histskew

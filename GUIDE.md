@@ -160,9 +160,12 @@ Move one phase at a time; don't skip.
 | **3. Live, tiny** | `BASIS_MODE=live` + a trade-only (withdraw-disabled) Hyperliquid agent key, a *fraction* of your capital | a little |
 | **4. Scale** | raise caps only as it proves out | grows slowly |
 
-Live order signing is deliberately gated until you wire your key. Risk limits
-(`BASIS_MAX_NOTIONAL_USD`, `MAX_LEVERAGE`, `MAX_ORDER_USD`, net-delta band) are hard
-ceilings enforced before every order — see the table in README_live.md.
+Live order signing is wired but **two-gated** (`BASIS_MODE=live` + `BASIS_LIVE_ARM=1`) and
+untested against the venue, so the first live order must be checked by hand. The full
+step-by-step — preflight, the agent key, the tiny-first rollout, and **how long to
+validate before you trust it** — is in **[GOING_LIVE.md](GOING_LIVE.md)**. Run
+`basis-preflight` for a go/no-go check anytime. Risk limits (`BASIS_MAX_NOTIONAL_USD`,
+`MAX_LEVERAGE`, `MAX_ORDER_USD`, net-delta band) are hard ceilings enforced before every order.
 
 ---
 

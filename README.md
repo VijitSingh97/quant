@@ -7,7 +7,8 @@ income from crypto. It's built around two engines — **delta-neutral funding ca
 paper-first execution layer to decide *when* each is worth running and to run it.
 
 > **New here?** Start with the **[User Guide (GUIDE.md)](GUIDE.md)** — install, run, read
-> the dashboard, and tune for better returns in ~10 minutes.
+> the dashboard, and tune for better returns in ~10 minutes. Ready for real money? See
+> **[GOING_LIVE.md](GOING_LIVE.md)** (staged rollout, preflight, and how long to validate first).
 
 > **Disclaimer.** Educational tooling, **not investment advice**. Backtests smooth
 > over fees, skew, slippage, and the tail events that actually blow up short-vol and
@@ -249,7 +250,7 @@ make test              # offline unit suite (default, ~0.1s)
 make test-integration  # opt-in: hit live venues and assert response shapes
 ```
 
-**153 tests, fully offline** (no network — the suite runs in ~0.2s). Coverage spans the
+**161 tests, fully offline** (no network — the suite runs in ~0.3s). Coverage spans the
 pure logic: vol math / Sharpe / drawdown / Pearson, Black-Scholes + greeks + strike-from-
 delta, the IV-surface smile/skew fit, position sizing, the asset registry, the backtest
 factor math (incl. the rotation `compute`/curve/alignment helpers), the auto-selector
@@ -261,7 +262,9 @@ errors, fast-fails geo-blocks), SQLite WAL mode, the `BASIS_DATA_DIR` override, 
 scheduler's per-cycle failure isolation, the container healthcheck's exit codes, the
 **self-validation** (report shape, due/throttle, storage, and the **walk-forward** OOS
 guard), the **fee model** (fees reduce equity + are tracked), the **regime study**
-helpers, and the **guarded tuner** (bounds, apply, rollback, reset) — all offline.
+helpers, the **guarded tuner** (bounds, apply, rollback, reset), and **live-readiness**
+(preflight checks + the live order **triple-gate**: blocked outside live, when unarmed,
+and when the kill switch is on) — all offline.
 
 **Integration suite (opt-in, `-m integration`)** — 14 live-venue *smoke* tests that hit
 the real endpoints (Hyperliquid, Coinbase, Deribit, OKX, Yahoo, Tardis, + the read-only

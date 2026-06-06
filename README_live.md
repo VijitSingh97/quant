@@ -324,19 +324,22 @@ status.py        shared status assembler (one source of truth for CLI + web)
 selector.py      auto asset-selection (persistent funding + hysteresis)
 auto.py          auto-rotating allocator (own book)
 validate.py      scheduled self-validation — re-check the rule weekly, suggest (never apply)
+tune.py          guarded apply path for suggestions (bounded/audited/reversible)
+preflight.py     live-readiness go/no-go check (places NO orders)
 scheduler.py     supervisor loop (container): run cycles, isolate failures, heartbeat
 healthcheck.py   container HEALTHCHECK — heartbeat freshness
 monitor.py · web.py · dashboard.html   CLI + web tracker
 exchanges/
   base.py        ExchangeClient interface + Order
   paper.py       simulates fills at the live mark (default)
-  hyperliquid.py read-only first (public data + account-by-address); live orders gated
+  hyperliquid.py read-only first; live orders behind a two-gate (live + armed) signer
 ```
 
-**Safety invariants:** paper unless `BASIS_MODE=live`; every order passes `risk.py`
-(max notional / leverage / order size / net-delta band); a `data/KILL_SWITCH` file
-halts all trading instantly; every signal, intent, block, and fill is logged
-append-only to `data/live.db`.
+**Safety invariants:** paper unless `BASIS_MODE=live` **and** `BASIS_LIVE_ARM=1` (two
+gates — you can't trade by accident); every order passes `risk.py` (max notional /
+leverage / order size / net-delta band); a `data/KILL_SWITCH` file halts all trading
+instantly; the agent key cannot withdraw; every signal, intent, block, and fill is logged
+append-only. **Going live:** run `basis-preflight` then follow **[GOING_LIVE.md](GOING_LIVE.md)**.
 
 ## Risk limits (env-overridable)
 
@@ -361,12 +364,14 @@ so an existing `.env` keeps working after the rename.
 | **0. Paper** | `make live-paper` / `live-web` | nothing | none | ✅ done |
 | **1. Read-only live** | `BASIS_HL_ADDRESS=0x… make live-monitor` | HL wallet *address* (no secret) | none | ✅ done |
 | **2. Paper, scheduled** | `./scripts/install_live_paper.sh` | nothing | none | ✅ done |
-| **3. Live, tiny** | `BASIS_MODE=live` + agent key | HL **agent wallet** (cannot withdraw) | a fraction of 0.1 BTC | ⏳ needs your key |
+| **3. Live, tiny** | `pip install -e ".[live]"`, `basis-preflight`, then `BASIS_MODE=live BASIS_LIVE_ARM=1` | HL **agent wallet** (cannot withdraw) + tiny deposit | a fraction of 0.1 BTC | 🔌 wired, gated — **needs your key + first-order check** |
 | **4. Scaled** | same, caps raised | — | scales as it proves out | — |
 
 **Funding:** you deposit USDC/BTC into your own Hyperliquid account; the system
-trades within it and has no withdrawal rights. Live order signing (Phase 3) is
-deliberately not wired yet — `hyperliquid.place_order` raises until it is.
+trades within it and has no withdrawal rights. Live order signing **is wired** (official
+HL SDK, behind the live+armed two-gate) but is **untested against the venue** — so the
+first live order must be verified by hand. The full staged procedure, the preflight, and
+**how long to validate before trusting it** are in **[GOING_LIVE.md](GOING_LIVE.md)**.
 
 *(Educational tooling, not investment advice. Crypto leverage and exchange failure
 are the real risks — the kill switch and trade-not-withdraw keys are there for a reason.)*
