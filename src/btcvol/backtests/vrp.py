@@ -34,8 +34,8 @@ def fwd_realized_vol(closes, i, horizon=HOLD):
 
 
 def run():
-    dvol = deribit_dvol(days=400, resolution="1D")
-    chart = deribit_chart("BTC-PERPETUAL", days=400, resolution="1D")
+    dvol = deribit_dvol(days=1000, resolution="1D")          # ~3y of DVOL (free backfill)
+    chart = deribit_chart("BTC-PERPETUAL", days=1000, resolution="1D")
     ticks, closes = chart["ticks"], chart["close"]
 
     iv_by_date = {time.strftime("%Y-%m-%d", time.gmtime(ts / 1000)): iv for ts, iv in dvol}

@@ -28,6 +28,7 @@ from ..core.sources import deribit_dvol, deribit_chart
 HOLD = 30
 YEAR = 365.0
 ROLLS_PER_YEAR = YEAR / HOLD
+LOOKBACK_DAYS = 1000          # DVOL backfills ~3y free; cap is 1000d (~33 rolls vs ~13 at 400)
 
 
 def _round(x, grid):
@@ -106,8 +107,8 @@ def load_market(skew=False):
         iv_fn = lambda atm, T, K, S: skew_iv(coeffs, atm, T, K, S)
         skew_note = f"skew from live {fit['ref_expiry']} surface (a={tuple(round(c,3) for c in coeffs)})"
 
-    dvol = deribit_dvol(days=400, resolution="1D")
-    chart = deribit_chart("BTC-PERPETUAL", days=400, resolution="1D")
+    dvol = deribit_dvol(days=LOOKBACK_DAYS, resolution="1D")
+    chart = deribit_chart("BTC-PERPETUAL", days=LOOKBACK_DAYS, resolution="1D")
     iv_by_date = {time.strftime("%Y-%m-%d", time.gmtime(ts / 1000)): iv for ts, iv in dvol}
     px_by_date = {time.strftime("%Y-%m-%d", time.gmtime(t / 1000)): c
                   for t, c in zip(chart["ticks"], chart["close"])}

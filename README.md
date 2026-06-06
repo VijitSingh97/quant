@@ -174,54 +174,41 @@ offline — no network calls.
 
 ---
 
-## Findings snapshot (2026-06-05, mid-correction)
+## Findings (≈3y of DVOL, ~33 condor rolls)
 
-- **Carry** (2y, unlevered): **+5.6% CAGR** net of fees; +8.6% (2024) → +5.4%
-  (2025) → **+1.0% (2026)**. Funding follows the cycle and thins out in corrections.
-- **Vol-risk-premium** (~1y): implied > realized **72% of days**; selling 30d vol
-  **won 77% of rolls** (~+4.2 vol pts avg, Sharpe ~1.0) — but the **worst roll lost
-  -28.8 vol pts** (Jan 2026, realized 67% vs implied 39%). One tail erases many wins.
-- **Condor rule** (~1y, 13 rolls): the defined-risk version won **85%** of months;
-  the two losing months lost a **bounded** max instead of the naked tail.
-  - *Flat-vol* pricing looked great (CAGR +21%, Sharpe 0.74) — but it **overstates**
-    the credit. Adding **real skew** (`--skew`) cuts avg credit ~17% and the edge
-    with it: unconditional drops to CAGR +5% / Sharpe 0.32, because in a put-skewed
-    market the long wing you *buy* is richer than the short you *sell*.
-  - The **DVOL>RV filter** is what keeps it viable under skew: CAGR ~+11%, Sharpe
-    0.55, maxDD −20% (vs −28% unconditional). Sample is small — directional, not conclusive.
+Backtests run on the full free history (DVOL backfills ~3y on Deribit; we use all of it).
 
-- **Combined book** (carry 3× + filtered condor 15%/roll, ~1y): **~doubles carry's
-  return** (CAGR ~+24% vs ~+13%) for a bounded ~−15% maxDD coming almost entirely
-  from the condor leg. Combined Sharpe (~1.2) sits below carry-only's (~3.4) — but
-  carry's Sharpe is *flattered* (its liquidation tail isn't in the curve). Legs are
-  only mildly correlated (r≈+0.3): both prefer calm, so the hedge between them is partial.
-- **Vol-targeting the condor risk** (`--vol-target`, size down when realized vol is high)
-  cut combined max drawdown roughly in half (~−15% → ~−8%) and lifted combined Sharpe
-  (~1.2 → ~1.7) for similar return — sizing, not selection, did that.
+- **Carry is the core edge.** Long spot / short perp earned **+24.5% CAGR at 3×**
+  (Sharpe 3.3, −0.8% *modelled* drawdown) over 3 years — unlevered ~+5.6%, cyclical
+  (+8.6% 2024 → +5.4% 2025 → +1.0% in the 2026 correction). Caveat: the real tail
+  (exchange insolvency / short-leg liquidation) isn't in that curve, so the Sharpe is flattered.
+- **Vol-risk-premium is real but tail-driven.** Implied > realized most days; selling
+  30d vol *naked* wins often, but one spike (Jan-2026: realized 67% vs implied 39%,
+  **−28.8 vol pts**) erases many wins ⇒ sell **defined-risk**, never naked.
+- **The condor edge is narrow and modest — the 1-year sample flattered it.** On 3 years,
+  the defined-risk condor at the *default* 20Δ/8% wings is roughly **break-even, and
+  negative after 15bps/roll fees**. A real edge survives only in a tight corner (~25Δ
+  short strikes, 5% wings: ~+25% CAGR) — just **8/15** parameter combos are positive.
+  Real **skew** lowers the credit further (the long wing you buy is richer than the short you sell).
+- **The combined book works through diversification, not condor return.** Over the full
+  cycle the legs are **negatively correlated (r≈−0.3)**, so the condor is a partial *hedge*
+  to carry rather than a standalone earner. Vol-targeted combined: **+21% CAGR, Sharpe
+  1.55, maxDD −11%** — sizing (vol-target), not selection, drives the risk-adjusted result.
 
-- **Robustness check** (anti-overfit): the condor edge is **parameter-sensitive** —
-  strong at ~20–25Δ / tight wings, negative at 10Δ (11/15 combos positive). Walk-forward
-  is the warning: the *best* in-sample params (Sharpe ~7 on 6 rolls) **collapsed to a
-  negative Sharpe out-of-sample** — the classic overfit signature. A 15bps/roll fee
-  costs ~4% CAGR. **Verdict: don't trust the optimized number; the edge is real-ish but
-  fragile on this little data.**
-
-**Takeaway:** both edges are real but tail-driven; **skew makes defined-risk selling
-less generous than flat-vol intuition suggests**; and **13 rolls can't confirm an edge**.
-The combined book is the *candidate* strategy — carry base + filtered defined-risk condor
-overlay, vol-targeted, never naked — but sizing stays small until issue #4's data grows.
+**Takeaway:** **carry is the workhorse; the condor is a marginal, parameter-sensitive
+overlay that earns its place as a vol-targeted *hedge*, not a return source.** Sell
+defined-risk and filtered (DVOL>RV), never naked, sized small. Even 33 rolls is short —
+keep [#4](https://github.com/VijitSingh97/quant/issues/4) accumulating before sizing up.
 
 ---
 
 ## Roadmap
 
-- ~~Defined-risk option spread / iron-condor modeler against the live Deribit chain~~ — done (`btcvol.structures`)
-- ~~Backtest the condor-selling rule historically (roll on DVOL>RV, measure the tail)~~ — done (`btcvol.backtests.structures`)
-- ~~Vol-surface & skew reader~~ — done (`btcvol.skew`); also feeds `--skew` into the condor backtest (which revealed flat-vol was over-optimistic)
-- ~~Capture 25Δ RR/BF over time in the logger~~ — done ([#1](https://github.com/VijitSingh97/quant/issues/1)); RR25/BF25/ATM/term-slope now logged
-- ~~Delta-neutral book monitor~~ — done (`btcvol.book`, [#3](https://github.com/VijitSingh97/quant/issues/3))
-- ~~Analyze strategies on our own captured `timeseries.csv`~~ — done (`btcvol.analyze`, [#2](https://github.com/VijitSingh97/quant/issues/2)); grows useful as history accrues
-- ~~Combined-book backtest (carry + filtered condor as one strategy)~~ — done (`btcvol.backtests.combined`, [#5](https://github.com/VijitSingh97/quant/issues/5))
-- ~~Position sizer (vol-target + fractional Kelly)~~ — done (`btcvol.size` + `core.sizing`, [#8](https://github.com/VijitSingh97/quant/issues/8)); wired into the combined book via `--vol-target`
-- ~~Robustness / anti-overfit (param sweep, walk-forward, costs)~~ — done (`btcvol.backtests.robustness`, [#7](https://github.com/VijitSingh97/quant/issues/7))
-- Open: [#4](https://github.com/VijitSingh97/quant/issues/4) data tracker (always-on) · [#6](https://github.com/VijitSingh97/quant/issues/6) historical-skew backtest (blocked on #4 data accruing)
+The roadmap is tracked in **[GitHub Issues](https://github.com/VijitSingh97/quant/issues)** —
+completed work is closed there (each feature commit references its issue), open work is:
+
+- [#4](https://github.com/VijitSingh97/quant/issues/4) — data-accumulation tracker (always-on; do not close)
+- [#6](https://github.com/VijitSingh97/quant/issues/6) — historical-skew condor backtest (blocked on #4 accruing)
+- [#9](https://github.com/VijitSingh97/quant/issues/9) — multi-asset (ETH/SOL/XRP/BNB + PAXG gold proxy)
+- [#10](https://github.com/VijitSingh97/quant/issues/10) — cross-asset equities/commodities/macro adapters
+- [#11](https://github.com/VijitSingh97/quant/issues/11) — richer log fields + extend free history backfill

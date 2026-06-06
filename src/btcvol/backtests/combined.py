@@ -63,7 +63,7 @@ def run(leverage=3.0, risk=0.15, skew=True, vol_target=None):
     if not rolls:
         print("No rolls.")
         return
-    funding = deribit_funding_history("BTC-PERPETUAL", days=420)
+    funding = deribit_funding_history("BTC-PERPETUAL", days=1020)   # cover the full condor window
 
     carry = carry_per_block(rolls, funding, leverage)
     # condor risk per block: fixed, or vol-targeted (size down when trailing RV is high)
