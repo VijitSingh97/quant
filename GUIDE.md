@@ -127,6 +127,18 @@ alone had the best Sharpe. So basis stays carry-only on purpose. Re-check yourse
 risk/cost. Optimize for **Sharpe and drawdown**, not just APR. Let the validator keep you
 honest.
 
+### e) Re-evaluating after a few months (the review)
+Let the whole thing run on paper for **2–3 months**, then review how it actually did:
+
+```bash
+make report-auto      # period P&L of the auto book: total return (net of fees), APR,
+                      # Sharpe, max drawdown, funding earned, fees, deployment %, rotations
+```
+The dashboard's **"Performance — since inception"** panel shows the same live. Equity is
+**delta-neutral** (a hedged book's equity moves with funding and fees, *not* with price),
+so what you're reading is the carry itself. Re-evaluate on **Sharpe + drawdown + whether
+it survived an adverse funding regime**, not the headline APR (see GOING_LIVE.md timing).
+
 ---
 
 ## 5. Monitoring, kill switch, and exports

@@ -117,6 +117,8 @@ make live-web        # web dashboard -> localhost:8787          [basis-live-web]
 make carry-scan      # rank all perps by persistent funding     [basis-carry-scan]
 make rotation        # backtest rotation vs fixed, net of cost  [basis-rotation]
 make validate        # self-validation report -> research.db    [basis-validate]
+make report-auto     # period P&L review of the auto book       [basis-report]
+make preflight       # live-readiness go/no-go (no orders)      [basis-preflight]
 ```
 
 Risk gate (USD limits + kill switch), SQLite audit store, read-only-first Hyperliquid
@@ -250,7 +252,7 @@ make test              # offline unit suite (default, ~0.1s)
 make test-integration  # opt-in: hit live venues and assert response shapes
 ```
 
-**164 tests, fully offline** (no network — the suite runs in ~0.3s). Coverage spans the
+**169 tests, fully offline** (no network — the suite runs in ~0.3s). Coverage spans the
 pure logic: vol math / Sharpe / drawdown / Pearson, Black-Scholes + greeks + strike-from-
 delta, the IV-surface smile/skew fit, position sizing, the asset registry, the backtest
 factor math (incl. the rotation `compute`/curve/alignment helpers), the auto-selector
@@ -264,7 +266,9 @@ scheduler's per-cycle failure isolation, the container healthcheck's exit codes,
 guard), the **fee model** (fees reduce equity + are tracked), the **regime study**
 helpers, the **guarded tuner** (bounds, apply, rollback, reset), and **live-readiness**
 (preflight checks + the live order **triple-gate**: blocked outside live, when unarmed,
-and when the kill switch is on), and the **cross-venue** funding spread logic — all offline.
+and when the kill switch is on), the **cross-venue** funding spread logic, the **period
+report** math, and **delta-neutral equity** (a price move leaves a hedged book's equity
+unchanged) — all offline.
 
 **Integration suite (opt-in, `-m integration`)** — 14 live-venue *smoke* tests that hit
 the real endpoints (Hyperliquid, Coinbase, Deribit, OKX, Yahoo, Tardis, + the read-only
