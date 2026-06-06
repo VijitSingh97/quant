@@ -1,22 +1,25 @@
-"""Live monitor — CLI status from the audit store + market + (read-only) live account.
+"""Live monitor — CLI status from the audit store + market + (read-only) live account
++ the cross-asset carry opportunities and whether the engine is actually trading them.
 
 Paper book always; if BTCVOL_HL_ADDRESS is set, also shows your real Hyperliquid
-account (positions/equity) read-only — Phase 1. Run:  python3 -m btcvol.live.monitor
+account (read-only — Phase 1). Run:  python3 -m btcvol.live.monitor
 """
 
 import time
 
 from . import config
-from .status import build_status
+from .status import build_status, opportunities
 from .store import Store
+from ..core import fmt_pct, safe
 
 
 def main():
     store = Store(config.DB_PATH)
-    s = build_status(store)
+    opps = safe("opportunities", lambda: opportunities(top=8))
+    s = build_status(store, opps=opps)
+    sym = s["symbol"]
     bar = "=" * 64
     print(f"\n{bar}\nLIVE MONITOR ({s['mode'].upper()} / {s['venue']})\n{bar}")
-    sym = s["symbol"]
     print(f"  kill switch: {'ACTIVE — halted' if s['kill'] else 'off'}")
     m = s["market"]
     print(f"  market       {sym} ${m['mark']:,.2f}   funding {m['funding_apr']*100:+.2f}% APR "
@@ -40,9 +43,23 @@ def main():
     else:
         print(f"\n  LIVE account: set BTCVOL_HL_ADDRESS=0x… for read-only live view (Phase 1)")
 
+    if opps:
+        best = opps[0]
+        print(f"\n  CARRY OPPORTUNITIES (persistent 14d-avg funding, all perps):")
+        print(f"    {'coin':7} {'14d-avg':>9} {'now':>8} {'%hrs+':>6} {'OI':>8}")
+        for o in opps:
+            here = "  <- DEPLOYED" if o["coin"] == sym else ""
+            posf = f"{o['pos_frac']*100:.0f}%" if o["pos_frac"] is not None else "—"
+            print(f"    {o['coin']:7} {fmt_pct(o['avg_apr']):>9} {fmt_pct(o['now_apr']):>8} {posf:>6} "
+                  f"${o['oi_usd']/1e6:>6.0f}M{here}")
+        print(f"\n  TRADING: engine deploys {sym} (FIXED, auto-rotate OFF) at {fmt_pct(m['funding_apr'])} now.")
+        if best["coin"] != sym:
+            print(f"           best persistent carry is {best['coin']} ({fmt_pct(best['avg_apr'])} 14d-avg) — "
+                  f"NOT being traded (no auto-selection yet).")
+
     print(f"\n  {s['config']}")
     print(f"\n  recent audit trail:")
-    for e in reversed(s["audit"][:10]):
+    for e in reversed(s["audit"][:8]):
         ts = time.strftime("%H:%M:%S", time.gmtime(e["ts"]))
         print(f"    {ts}  {e['kind']:16} {(e['data'] or '')[:90]}")
     store.close()

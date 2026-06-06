@@ -15,22 +15,29 @@ import time
 from pathlib import Path
 
 from . import config
-from .status import build_status, market_snapshot, live_account
+from .status import build_status, market_snapshot, live_account, opportunities
 from .store import Store
 
 HTML = (Path(__file__).parent / "dashboard.html").read_bytes()
-_cache = {"market": None, "live": None, "ts": 0.0}
+_cache = {"market": None, "live": None, "opps": None, "mts": 0.0, "ots": 0.0}
 
 
-def _refresh(ttl=30):
-    if time.time() - _cache["ts"] > ttl:
+def _refresh(market_ttl=30, opps_ttl=300):
+    now = time.time()
+    if now - _cache["mts"] > market_ttl:            # market + live: cheap, refresh often
         try:
             _cache["market"] = market_snapshot()
             if config.HL_ADDRESS:
                 from .exchanges.hyperliquid import HyperliquidClient
                 _cache["live"] = live_account(HyperliquidClient())
-            _cache["ts"] = time.time()
+            _cache["mts"] = now
         except Exception:       # noqa: BLE001 — keep serving stale on a transient error
+            pass
+    if now - _cache["ots"] > opps_ttl:              # opportunities: ~9 calls, refresh slowly
+        try:
+            _cache["opps"] = opportunities(top=8)
+            _cache["ots"] = now
+        except Exception:       # noqa: BLE001
             pass
     return _cache
 
@@ -50,7 +57,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             c = _refresh()
             store = Store(config.DB_PATH)
             try:
-                s = build_status(store, market=c["market"] or market_snapshot(), include_live=False)
+                s = build_status(store, market=c["market"] or market_snapshot(),
+                                 include_live=False, opps=c["opps"])
             finally:
                 store.close()
             s["live"] = c["live"]

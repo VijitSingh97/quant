@@ -49,6 +49,12 @@ Find the best:
 make carry-scan      # ranks all HL perps by funding APR (liquid only) + caveats
 ```
 
+The monitor and web dashboard now show a live **carry-opportunities** panel — all perps
+ranked by persistent (14d-avg) funding — and a **TRADING** line that states plainly what
+the engine is actually deploying vs the best market (e.g. "deploys BTC at −5% now; best
+persistent carry is XMR +32% — NOT traded, auto-rotate OFF"). The engine does **not**
+auto-rotate yet; it deploys a fixed asset you choose:
+
 The engine deploys whatever `BTCVOL_SYMBOL` you set (own paper book per asset; all
 risk limits are USD-based so they work for any price level):
 

@@ -62,6 +62,12 @@
   </div>
 
   <div class="card" style="margin-top:12px">
+    <h3>Carry opportunities — all perps, ranked by persistent (14d) funding</h3>
+    <div id="trading" class="sub" style="margin-bottom:8px">—</div>
+    <table id="opps"></table>
+  </div>
+
+  <div class="card" style="margin-top:12px">
     <h3>Audit trail</h3>
     <div id="log" class="log"></div>
   </div>
@@ -112,6 +118,23 @@ async function tick(){
 
   $('market').textContent=`${s.symbol||'BTC'} ${usd(s.market.mark)}`+(s.market.dvol?` · DVOL ${(s.market.dvol*100).toFixed(0)}%`:'');
   sparkline(s.pnl_history);
+
+  // carry opportunities (all perps, persistent funding) + deployed-vs-best gap
+  const pct=x=>(x>=0?'+':'')+(x*100).toFixed(1)+'%';
+  if(s.opportunities&&s.opportunities.length){
+    const best=s.opportunities[0], dep=s.symbol||'BTC';
+    let gap = best.coin!==dep
+      ? `engine deploys <b>${dep}</b> (FIXED, auto-rotate OFF) at ${pct(s.deployed.funding_apr)} now · best persistent: <b class="pos">${best.coin}</b> ${pct(best.avg_apr)} — not traded`
+      : `engine deploys <b>${dep}</b> — currently the top persistent carry`;
+    $('trading').innerHTML='TRADING: '+gap;
+    let rows=`<tr><td class="mut">coin</td><td class="mut">14d-avg</td><td class="mut">now</td><td class="mut">%hrs+</td><td class="mut">OI</td></tr>`;
+    for(const o of s.opportunities){
+      const dpl=o.coin===dep?' style="background:#16203a"':'';
+      const pf=o.pos_frac==null?'—':(o.pos_frac*100).toFixed(0)+'%';
+      rows+=`<tr${dpl}><td>${o.coin}</td><td class="${o.avg_apr>=0?'pos':'neg'}">${pct(o.avg_apr)}</td><td>${pct(o.now_apr)}</td><td>${pf}</td><td>$${(o.oi_usd/1e6).toFixed(0)}M</td></tr>`;
+    }
+    $('opps').innerHTML=rows;
+  }
 
   $('log').innerHTML=(s.audit||[]).map(e=>{
     const tm=new Date(e.ts*1000).toLocaleTimeString();
