@@ -225,6 +225,9 @@ Backtests run on the full free history (DVOL backfills ~3y on Deribit; we use al
   vs the static-fit's **+3.5%** — close, so applying today's shape historically was an
   honest approximation (it mildly *understated* the edge). This validates the earlier
   static-skew results on real data, **without waiting months** for our own logger.
+- **Vol-of-vol gate** (Du 2025, `--vov`): skipping rolls when vol-of-vol is above its
+  expanding median (unstable-vol regimes) lifts the filtered condor to CAGR **+9.3%**,
+  Sharpe **0.48**, maxDD **−20%** — a genuine improvement over the plain DVOL>RV filter.
 
 **Takeaway:** **carry is the workhorse; the condor is a marginal, parameter-sensitive
 overlay that earns its place as a vol-targeted *hedge*, not a return source.** Sell

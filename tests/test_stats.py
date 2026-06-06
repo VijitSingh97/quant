@@ -79,3 +79,10 @@ def test_range_estimators_zero_on_flat_series():
     flat = [100] * 10
     assert stats.garman_klass(flat, flat, flat, flat, 10) == 0.0     # no range, no moves
     assert stats.yang_zhang(flat, flat, flat, flat, 10) == 0.0
+
+
+def test_vol_of_vol():
+    assert stats.vol_of_vol([0.5] * 40, 30) == 0.0                   # flat DVOL -> zero VOV
+    wavy = [0.5 + 0.05 * (i % 2) for i in range(40)]
+    assert stats.vol_of_vol(wavy, 30) > 0                            # oscillating DVOL -> positive
+    assert stats.vol_of_vol([0.5], 30) is None                      # too short

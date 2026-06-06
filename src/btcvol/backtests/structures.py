@@ -25,7 +25,7 @@ import statistics
 import time
 
 from ..core import (cc_vol, sharpe, max_drawdown, sparkline, fmt_pct, fmt_vol,
-                    bs_price, strike_for_delta, DATA_DIR)
+                    bs_price, strike_for_delta, vol_of_vol, DATA_DIR)
 from ..core.sources import deribit_dvol, deribit_chart
 from ..core.surface import skew_iv, skew_from_metrics
 
@@ -168,12 +168,14 @@ def simulate_from(market, delta=0.20, wing_pct=0.08, grid=None, fee_bps=0.0, ske
                                     market["T"], market["iv_fn"], market["skew"])
     if grid is None:
         grid = _nice_grid(S[len(S) // 2])
-    detail, always, filtered = [], [], []
+    detail, always, filtered, vov_filtered = [], [], [], []
+    vov_seen = []
     i = 0
     while i + HOLD < len(S):
         st0, iv0, d0 = S[i], IV[i], dates[i]
         rv_trail = cc_vol(S[: i + 1], 30) if i >= 31 else None
         rv_fwd = cc_vol(S[i: i + HOLD + 1], HOLD)
+        vov = vol_of_vol(IV[: i + 1], 30) if i >= 31 else None
         roll_iv_fn = iv_fn
         if skew_series is not None:                  # per-roll historical skew
             coeffs = _nearest_coeffs(skew_series, _date_ms(d0))
@@ -183,7 +185,7 @@ def simulate_from(market, delta=0.20, wing_pct=0.08, grid=None, fee_bps=0.0, ske
         fee = fee_bps / 1e4 * st0
         pnl = _expiry_pnl(c, S[i + HOLD]) - fee
         ror = pnl / c["max_loss"] if c["max_loss"] > 0 else 0.0
-        row = {"date": d0, "iv": iv0, "rv_trail": rv_trail, "rv_fwd": rv_fwd,
+        row = {"date": d0, "iv": iv0, "rv_trail": rv_trail, "rv_fwd": rv_fwd, "vov": vov,
                "credit": c["credit"], "credit_flat": credit_flat,
                "max_loss": c["max_loss"], "pnl": pnl, "ror": ror}
         detail.append(row)
@@ -191,9 +193,17 @@ def simulate_from(market, delta=0.20, wing_pct=0.08, grid=None, fee_bps=0.0, ske
         sell = rv_trail is None or iv0 > rv_trail        # DVOL>RV filter (sell when rich)
         filtered.append({**row, "active": sell, "ror": ror if sell else 0.0,
                          "pnl": pnl if sell else 0.0})
+        # add a VOV gate: also require vol-of-vol below its expanding median (no lookahead)
+        vov_ok = vov is None or not vov_seen or vov <= statistics.median(vov_seen)
+        if vov is not None:
+            vov_seen.append(vov)
+        on = sell and vov_ok
+        vov_filtered.append({**row, "active": on, "ror": ror if on else 0.0,
+                             "pnl": pnl if on else 0.0})
         i += HOLD
     return {"detail": detail, "always": always, "filtered": filtered,
-            "dates": dates, "skew": skew, "skew_note": market["skew_note"]}
+            "vov_filtered": vov_filtered, "dates": dates, "skew": skew,
+            "skew_note": market["skew_note"]}
 
 
 def simulate(delta=0.20, wing_pct=0.08, grid=1000.0, skew=False, asset="BTC"):
@@ -201,7 +211,7 @@ def simulate(delta=0.20, wing_pct=0.08, grid=1000.0, skew=False, asset="BTC"):
     return simulate_from(load_market(skew, asset), delta, wing_pct, grid)
 
 
-def run(delta=0.20, wing_pct=0.08, risk=0.20, grid=None, skew=False, asset="BTC"):
+def run(delta=0.20, wing_pct=0.08, risk=0.20, grid=None, skew=False, asset="BTC", vov=False):
     from ..core.assets import get_asset
     if not get_asset(asset)["has_dvol"]:
         print(f"{asset.upper()} has no DVOL index — vol backtests need one (try BTC or ETH).")
@@ -232,6 +242,12 @@ def run(delta=0.20, wing_pct=0.08, risk=0.20, grid=None, skew=False, asset="BTC"
 
     s_always = _summarize("SELL EVERY MONTH (unconditional)", always, risk)
     s_filt = _summarize("SELL ONLY WHEN DVOL > TRAILING RV (filtered)", filtered, risk)
+    if vov:
+        s_vov = _summarize("FILTERED + VOL-OF-VOL gate (skip unstable-vol regimes)",
+                           sim["vov_filtered"], risk)
+        _print_summary(s_vov, risk)
+        print(f"  (VOV gate: also requires vol-of-vol below its expanding median; "
+              f"vs plain filter CAGR {fmt_pct(s_filt['cagr'])} / Sharpe {s_filt['sharpe']:.2f})")
     _print_summary(s_always, risk)
     _print_summary(s_filt, risk)
 
@@ -296,12 +312,14 @@ def main():
     ap.add_argument("--risk", type=float, default=0.20, help="capital fraction risked per roll for the compounding curve (default 0.20)")
     ap.add_argument("--skew", action="store_true", help="price legs with today's fitted skew shape (vs flat vol)")
     ap.add_argument("--histskew", action="store_true", help="compare real per-roll historical skew (Tardis backfill) vs static fit")
+    ap.add_argument("--vov", action="store_true", help="also show a vol-of-vol-gated filter (skip unstable-vol regimes)")
     ap.add_argument("--asset", default="BTC", help="asset with a DVOL index (BTC or ETH)")
     args = ap.parse_args()
     if args.histskew:
         run_histskew(asset=args.asset, delta=args.delta, wing_pct=args.wing_pct, risk=args.risk)
     else:
-        run(delta=args.delta, wing_pct=args.wing_pct, risk=args.risk, skew=args.skew, asset=args.asset)
+        run(delta=args.delta, wing_pct=args.wing_pct, risk=args.risk, skew=args.skew,
+            asset=args.asset, vov=args.vov)
 
 
 if __name__ == "__main__":

@@ -68,6 +68,18 @@ def yang_zhang(opens, highs, lows, closes, window=30):
     return math.sqrt(v_on + k * v_oc + (1 - k) * rs) * math.sqrt(DAYS)
 
 
+def vol_of_vol(implied_series, window=30):
+    """Annualized vol of the implied-vol (DVOL) series — the 'vol-of-vol' that recent
+    work (Du 2025) finds is a priced risk factor. implied_series: DVOL levels
+    (fractions), oldest->newest. High VOV = an unstable vol regime (tail risk up)."""
+    seg = implied_series[-(window + 1):] if len(implied_series) > window + 1 else implied_series
+    chg = [math.log(seg[i] / seg[i - 1]) for i in range(1, len(seg))
+           if seg[i - 1] > 0 and seg[i] > 0]
+    if len(chg) < 2:
+        return None
+    return statistics.stdev(chg) * math.sqrt(DAYS)
+
+
 def max_drawdown(equity):
     """Max peak-to-trough drawdown of an equity curve (list of levels)."""
     peak, mdd = equity[0], 0.0
