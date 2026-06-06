@@ -1,6 +1,6 @@
 PY := PYTHONPATH=src python3
 
-.PHONY: help install dev test dashboard monitor carry vrp condor-bt structures skew log launchd-install launchd-uninstall clean
+.PHONY: help install dev test dashboard monitor carry vrp condor-bt structures skew book log launchd-install launchd-uninstall clean
 
 help:
 	@echo "make install            editable install (pip install -e .)"
@@ -13,6 +13,7 @@ help:
 	@echo "make condor-bt          backtest the monthly condor-selling rule"
 	@echo "make structures         defined-risk option structures vs live chain"
 	@echo "make skew               read the live implied-vol surface / skew"
+	@echo "make book               delta-neutral book monitor (net-delta drift)"
 	@echo "make log                append one row to data/timeseries.csv"
 	@echo "make launchd-install    install the hourly logger launchd agent"
 	@echo "make launchd-uninstall  remove the launchd agent"
@@ -46,6 +47,9 @@ structures:
 
 skew:
 	$(PY) -m btcvol.skew
+
+book:
+	$(PY) -m btcvol.book
 
 log:
 	$(PY) -m btcvol.logger
