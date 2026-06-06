@@ -1,6 +1,6 @@
 PY := PYTHONPATH=src python3
 
-.PHONY: help install dev test dashboard monitor carry vrp combined histskew robust condor-bt structures skew book size analyze macro backfill histskew2 live-paper live-monitor live-web log launchd-install launchd-uninstall clean
+.PHONY: help install dev test dashboard monitor carry vrp combined histskew robust condor-bt structures skew book size analyze macro backfill carry-scan histskew2 live-paper live-monitor live-web log launchd-install launchd-uninstall clean
 
 help:
 	@echo "make install            editable install (pip install -e .)"
@@ -21,6 +21,7 @@ help:
 	@echo "make analyze            analyze our own captured data/timeseries.csv"
 	@echo "make macro              cross-asset VRP for equities/commodities (SPX/GOLD/OIL)"
 	@echo "make backfill           backfill historical skew from Tardis free monthly snapshots"
+	@echo "make carry-scan         rank cross-asset funding (best carry to deploy now)"
 	@echo "make histskew2          condor with REAL historical skew (Tardis) vs static"
 	@echo "make live-paper         run one paper reconcile cycle (carry, no real money)"
 	@echo "make live-monitor       live book status + audit trail"
@@ -82,6 +83,9 @@ macro:
 
 backfill:
 	$(PY) -m btcvol.backfill --start 2023-09
+
+carry-scan:
+	$(PY) -m btcvol.carryscan
 
 histskew2:
 	$(PY) -m btcvol.backtests.structures --histskew

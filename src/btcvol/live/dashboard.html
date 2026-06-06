@@ -87,13 +87,13 @@ function sparkline(hist){
 async function tick(){
   let s; try{ s=await (await fetch('/api/status')).json() }catch(e){ return }
   $('mode').textContent=s.mode; $('mode').className='badge '+(s.mode==='live'?'b-live':'b-paper');
-  $('venue').textContent=s.venue;
+  $('venue').textContent=s.venue+' · '+(s.symbol||'BTC');
   $('updated').textContent='updated '+new Date(s.ts*1000).toLocaleTimeString();
   $('kill').style.display=s.kill?'block':'none';
 
   const nd=s.paper.net_delta;
   $('delta').textContent=btc(nd); $('delta').className='big '+cls(nd,1e-3);
-  $('deltaSub').textContent=Math.abs(nd)<1e-3?'BTC · NEUTRAL ✓':'BTC · drifting';
+  $('deltaSub').textContent=(s.symbol||'BTC')+(Math.abs(nd)<1e-3?' · NEUTRAL ✓':' · drifting');
   $('equity').textContent=usd(s.equity);
   $('funding').textContent=usd(s.paper.funding_usd);
   $('apr').textContent=(s.market.funding_apr*100).toFixed(2)+'%';
@@ -110,7 +110,7 @@ async function tick(){
     : `<tr><td>live acct</td><td class="mut">${s.live.address.slice(0,8)}…</td><td>Δ ${btc(s.live.net_delta)} · ${usd(s.live.equity)}</td></tr>`; }
   $('book').innerHTML=rows;
 
-  $('market').textContent=`BTC ${usd(s.market.mark)}`+(s.market.dvol?` · DVOL ${(s.market.dvol*100).toFixed(0)}%`:'');
+  $('market').textContent=`${s.symbol||'BTC'} ${usd(s.market.mark)}`+(s.market.dvol?` · DVOL ${(s.market.dvol*100).toFixed(0)}%`:'');
   sparkline(s.pnl_history);
 
   $('log').innerHTML=(s.audit||[]).map(e=>{

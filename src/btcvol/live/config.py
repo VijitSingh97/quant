@@ -24,24 +24,25 @@ HL_ADDRESS = os.environ.get("BTCVOL_HL_ADDRESS", "")
 HL_API_SECRET = os.environ.get("BTCVOL_HL_API_SECRET", "")
 
 # --- strategy ---
-SYMBOL = "BTC"
+SYMBOL = os.environ.get("BTCVOL_SYMBOL", "BTC").upper()   # deploy asset (BTC/ETH/SOL/HYPE…)
 CAPITAL_BTC = _f("BTCVOL_CAPITAL_BTC", "0.1")     # paper seed / target capital
 DEPLOY_FRACTION = _f("BTCVOL_DEPLOY_FRACTION", "0.85")   # rest held as buffer
 FUNDING_TIMED = os.environ.get("BTCVOL_FUNDING_TIMED", "1") == "1"
 
-# --- hard risk limits (enforced pre-trade) ---
+# --- hard risk limits (enforced pre-trade; USD so they're asset-agnostic) ---
 MAX_NOTIONAL_USD = _f("BTCVOL_MAX_NOTIONAL_USD", "10000")
 MAX_LEVERAGE = _f("BTCVOL_MAX_LEVERAGE", "2.0")
-MAX_ABS_DELTA_BTC = _f("BTCVOL_MAX_ABS_DELTA_BTC", "0.02")   # reconcile band
-MAX_ORDER_BTC = _f("BTCVOL_MAX_ORDER_BTC", "0.05")
-MIN_ORDER_BTC = _f("BTCVOL_MIN_ORDER_BTC", "0.0001")
+MAX_ABS_DELTA_USD = _f("BTCVOL_MAX_ABS_DELTA_USD", "1200")   # net-delta reconcile band
+MAX_ORDER_USD = _f("BTCVOL_MAX_ORDER_USD", "3000")
+MIN_ORDER_USD = _f("BTCVOL_MIN_ORDER_USD", "10")
 
 # --- paths ---
-DB_PATH = DATA_DIR / "live.db"
-KILL_FILE = DATA_DIR / "KILL_SWITCH"          # presence halts ALL trading
+DB_PATH = DATA_DIR / ("live.db" if SYMBOL == "BTC" else f"live_{SYMBOL.lower()}.db")
+KILL_FILE = DATA_DIR / "KILL_SWITCH"          # presence halts ALL trading (any asset)
 
 
 def summary():
-    return (f"mode={MODE} venue={VENUE} capital={CAPITAL_BTC}BTC deploy={DEPLOY_FRACTION:.0%} "
-            f"timed={FUNDING_TIMED} | limits: notional<=${MAX_NOTIONAL_USD:,.0f} "
-            f"lev<={MAX_LEVERAGE} order<={MAX_ORDER_BTC}BTC delta-band={MAX_ABS_DELTA_BTC}BTC")
+    return (f"mode={MODE} venue={VENUE} asset={SYMBOL} capital={CAPITAL_BTC}BTC "
+            f"deploy={DEPLOY_FRACTION:.0%} timed={FUNDING_TIMED} | limits: "
+            f"notional<=${MAX_NOTIONAL_USD:,.0f} lev<={MAX_LEVERAGE} "
+            f"order<=${MAX_ORDER_USD:,.0f} delta-band=${MAX_ABS_DELTA_USD:,.0f}")

@@ -12,7 +12,7 @@ from ..core.sources import hyperliquid_perp, deribit_dvol
 
 
 def market_snapshot():
-    hl = hyperliquid_perp("BTC")
+    hl = hyperliquid_perp(config.SYMBOL)
     try:
         dv = deribit_dvol(days=2, resolution="1D")
         dvol = dv[-1][1] if dv else None
@@ -50,7 +50,7 @@ def build_status(store, market=None, include_live=True):
         from .exchanges.hyperliquid import HyperliquidClient
         live = live_account(HyperliquidClient())
     return {
-        "ts": time.time(), "mode": config.MODE, "venue": config.VENUE,
+        "ts": time.time(), "mode": config.MODE, "venue": config.VENUE, "symbol": config.SYMBOL,
         "kill": config.KILL_FILE.exists(),
         "market": market,
         "carry_on": (market["funding_apr"] > 0) or (not config.FUNDING_TIMED),

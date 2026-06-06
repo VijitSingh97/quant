@@ -10,6 +10,7 @@ explicitly each cycle. equity = cash + spot·mark + accrued_funding − slippage
 import time
 
 from .base import ExchangeClient
+from .. import config
 from ...core.sources import hyperliquid_perp
 
 SLIPPAGE = 0.0005          # 5 bps simulated taker slippage
@@ -18,8 +19,9 @@ SLIPPAGE = 0.0005          # 5 bps simulated taker slippage
 class PaperExchange(ExchangeClient):
     name = "paper"
 
-    def __init__(self, store, seed_usd):
+    def __init__(self, store, seed_usd, symbol=None):
         self.store = store
+        self.symbol = symbol or config.SYMBOL
         if "cash_usd" not in store.positions():
             store.set_position("cash_usd", seed_usd, 1.0)
             store.set_position("spot", 0.0, 0.0)
@@ -29,7 +31,7 @@ class PaperExchange(ExchangeClient):
             store.log("paper_seed", {"usd": seed_usd})
 
     def _meta(self):
-        return hyperliquid_perp("BTC")
+        return hyperliquid_perp(self.symbol)
 
     def mark_price(self, symbol="BTC"):
         return self._meta()["mark"]

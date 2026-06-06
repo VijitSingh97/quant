@@ -17,16 +17,19 @@ def build_client(store):
         return HyperliquidClient()
     from .exchanges.paper import PaperExchange
     from ..core.sources import hyperliquid_perp
-    return PaperExchange(store, config.CAPITAL_BTC * hyperliquid_perp("BTC")["mark"])
+    seed_usd = config.CAPITAL_BTC * hyperliquid_perp("BTC")["mark"]   # capital is BTC-denominated
+    return PaperExchange(store, seed_usd, symbol=config.SYMBOL)
 
 
 def plan_orders(current, target, mark, venue):
     orders = []
+    min_qty = config.MIN_ORDER_USD / mark
+    max_qty = config.MAX_ORDER_USD / mark
     for leg in ("spot", "perp"):
         diff = target.get(leg, 0.0) - current.get(leg, 0.0)
-        if abs(diff) < config.MIN_ORDER_BTC:
+        if abs(diff) < min_qty:
             continue
-        qty = min(abs(diff), config.MAX_ORDER_BTC)           # clamp; next cycle finishes the rest
+        qty = min(abs(diff), max_qty)                        # clamp; next cycle finishes the rest
         orders.append(Order(symbol=config.SYMBOL, side="buy" if diff > 0 else "sell",
                             qty=qty, leg=leg, price=mark, venue=venue))
     return orders
@@ -51,9 +54,10 @@ def reconcile(client, store):
     for o in orders:
         after = dict(current)
         after[o.leg] = after.get(o.leg, 0.0) + o.signed_qty
-        ctx = {"notional_usd_after": abs(after.get("perp", 0.0)) * mark,
+        ctx = {"order_notional_usd": o.qty * mark,
+               "notional_usd_after": abs(after.get("perp", 0.0)) * mark,
                "leverage_after": (abs(after.get("perp", 0.0)) * mark / equity) if equity > 0 else 0,
-               "net_delta_after_btc": target_delta}          # strategy target is neutral by construction
+               "net_delta_usd_after": target_delta * mark}   # strategy target is neutral by construction
         ok, reason = risk.check_order(o, ctx)
         oid = store.add_order(o, "accepted" if ok else "blocked", reason)
         store.log("order_intent", {"order_id": oid, "leg": o.leg, "side": o.side,

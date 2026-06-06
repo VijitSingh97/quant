@@ -27,9 +27,10 @@ def test_carry_target_respects_deploy_fraction():
     assert abs(t["spot"] - (6000 * 0.5 / 60000)) < 1e-12
 
 
-# --- risk gate ---
-def _ctx(notional=1000, lev=0.5, delta=0.0):
-    return {"notional_usd_after": notional, "leverage_after": lev, "net_delta_after_btc": delta}
+# --- risk gate (USD-based, asset-agnostic) ---
+def _ctx(order_usd=1000, notional=1000, lev=0.5, delta_usd=0.0):
+    return {"order_notional_usd": order_usd, "notional_usd_after": notional,
+            "leverage_after": lev, "net_delta_usd_after": delta_usd}
 
 
 def test_risk_passes_clean_order():
@@ -38,7 +39,7 @@ def test_risk_passes_clean_order():
 
 
 def test_risk_blocks_oversize_order():
-    ok, why = risk.check_order(Order("BTC", "buy", config.MAX_ORDER_BTC * 2, "spot"), _ctx())
+    ok, why = risk.check_order(Order("BTC", "buy", 1.0, "spot"), _ctx(order_usd=config.MAX_ORDER_USD * 2))
     assert not ok and "max" in why
 
 
@@ -48,14 +49,14 @@ def test_risk_blocks_over_leverage_and_notional():
 
 
 def test_risk_blocks_delta_breach():
-    assert not risk.check_order(Order("BTC", "buy", 0.01, "spot"), _ctx(delta=0.5))[0]
+    assert not risk.check_order(Order("BTC", "buy", 0.01, "spot"), _ctx(delta_usd=999999))[0]
 
 
 # --- engine planning ---
 def test_plan_orders_diffs_and_clamps():
     orders = plan_orders({"spot": 0.0, "perp": 0.0}, {"spot": 0.085, "perp": -0.085}, 60000, "paper")
     assert {o.leg for o in orders} == {"spot", "perp"}
-    assert all(o.qty <= config.MAX_ORDER_BTC for o in orders)        # clamped to max order size
+    assert all(o.qty <= config.MAX_ORDER_USD / 60000 + 1e-9 for o in orders)   # clamped by $ size
 
 
 def test_plan_orders_noop_at_target():

@@ -16,14 +16,15 @@ def main():
     s = build_status(store)
     bar = "=" * 64
     print(f"\n{bar}\nLIVE MONITOR ({s['mode'].upper()} / {s['venue']})\n{bar}")
+    sym = s["symbol"]
     print(f"  kill switch: {'ACTIVE — halted' if s['kill'] else 'off'}")
     m = s["market"]
-    print(f"  market       BTC ${m['mark']:,.0f}   funding {m['funding_apr']*100:+.2f}% APR "
+    print(f"  market       {sym} ${m['mark']:,.2f}   funding {m['funding_apr']*100:+.2f}% APR "
           f"({'carry ON' if s['carry_on'] else 'carry OFF — flat'})"
           + (f"   DVOL {m['dvol']*100:.0f}%" if m.get('dvol') else ""))
 
     b = s["paper"]
-    print(f"\n  PAPER book   spot {b['spot']:+.4f}  perp {b['perp']:+.4f}  net delta {b['net_delta']:+.4f} BTC")
+    print(f"\n  PAPER book   spot {b['spot']:+.4f}  perp {b['perp']:+.4f}  net delta {b['net_delta']:+.4f} {sym}")
     print(f"               cash ${b['cash']:,.2f}   funding earned ${b['funding_usd']:,.4f}   "
           f"equity ${s['equity']:,.2f}")
     t = s["target"]
@@ -35,7 +36,7 @@ def main():
             print(f"\n  LIVE account ({lv['address'][:10]}…): {lv['error']}")
         else:
             print(f"\n  LIVE account ({lv['address'][:10]}…)   spot {lv['spot']:+.4f}  perp {lv['perp']:+.4f}  "
-                  f"net delta {lv['net_delta']:+.4f} BTC   equity ${lv['equity']:,.2f}")
+                  f"net delta {lv['net_delta']:+.4f} {sym}   equity ${lv['equity']:,.2f}")
     else:
         print(f"\n  LIVE account: set BTCVOL_HL_ADDRESS=0x… for read-only live view (Phase 1)")
 

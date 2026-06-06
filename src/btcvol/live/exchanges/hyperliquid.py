@@ -17,17 +17,18 @@ INFO = "https://api.hyperliquid.xyz/info"
 class HyperliquidClient(ExchangeClient):
     name = "hyperliquid"
 
-    def __init__(self, address=""):
+    def __init__(self, address="", symbol=None):
         self.address = address or config.HL_ADDRESS
+        self.symbol = symbol or config.SYMBOL
 
-    def mark_price(self, symbol="BTC"):
-        return hyperliquid_perp(symbol)["mark"]
+    def mark_price(self, symbol=None):
+        return hyperliquid_perp(symbol or self.symbol)["mark"]
 
-    def funding_apr(self, symbol="BTC"):
-        return hyperliquid_perp(symbol)["funding_apr"]
+    def funding_apr(self, symbol=None):
+        return hyperliquid_perp(symbol or self.symbol)["funding_apr"]
 
-    def funding_rate_1h(self, symbol="BTC"):
-        return hyperliquid_perp(symbol)["funding_rate_1h"]
+    def funding_rate_1h(self, symbol=None):
+        return hyperliquid_perp(symbol or self.symbol)["funding_rate_1h"]
 
     def _require_address(self):
         if not self.address:
@@ -36,14 +37,14 @@ class HyperliquidClient(ExchangeClient):
     def positions(self):
         self._require_address()
         perp = http_post(INFO, {"type": "clearinghouseState", "user": self.address})
-        perp_btc = 0.0
+        perp_qty = 0.0
         for ap in perp.get("assetPositions", []):
             p = ap.get("position", {})
-            if p.get("coin") == "BTC":
-                perp_btc = float(p.get("szi", 0.0))
+            if p.get("coin") == self.symbol:
+                perp_qty = float(p.get("szi", 0.0))
         spot = http_post(INFO, {"type": "spotClearinghouseState", "user": self.address})
-        spot_btc = sum(float(b["total"]) for b in spot.get("balances", []) if b.get("coin") == "BTC")
-        return {"spot": spot_btc, "perp": perp_btc}
+        spot_qty = sum(float(b["total"]) for b in spot.get("balances", []) if b.get("coin") == self.symbol)
+        return {"spot": spot_qty, "perp": perp_qty}
 
     def equity_usd(self):
         self._require_address()

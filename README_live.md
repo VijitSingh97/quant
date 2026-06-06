@@ -39,6 +39,30 @@ account (if configured), and the live **audit trail** — auto-refreshing every 
 Runs the carry engine hourly like the data logger; accrues funding and builds the
 audit trail in `data/live.db`. Logs to `data/paper.{out,err}.log`.
 
+## Which asset to deploy (carry scanner + multi-asset engine)
+
+Funding (the carry yield) varies hugely by asset — in a correction the majors' perps
+can go *negative* (longs paid) while liquid alts sit at Hyperliquid's ~+11% baseline.
+Find the best:
+
+```bash
+make carry-scan      # ranks all HL perps by funding APR (liquid only) + caveats
+```
+
+The engine deploys whatever `BTCVOL_SYMBOL` you set (own paper book per asset; all
+risk limits are USD-based so they work for any price level):
+
+```bash
+BTCVOL_SYMBOL=ETH make live-paper      # deploy the carry on ETH instead of BTC
+```
+
+The funding-timed allocator stays flat (cash) on any asset whose funding is negative,
+so pointing it at a negative-funding asset correctly does nothing. Notes: you need a
+**spot leg** to be delta-neutral — trivial for BTC/ETH/SOL/HYPE (spot + perp on HL),
+needs cross-venue spot for other alts; and very high funding is usually thin/transient,
+not a gift. Auto-rotation to the best asset is a deliberate *future* step (with a
+liquidity floor + hysteresis so it doesn't churn on noise) — not on by default.
+
 ## Read-only live account (Phase 1 — done)
 
 Set your Hyperliquid wallet **address** (public, no secret) to see your real account

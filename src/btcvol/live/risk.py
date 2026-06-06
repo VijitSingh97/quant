@@ -12,18 +12,18 @@ def kill_active():
 
 
 def check_order(order, ctx):
-    """ctx: dict with notional_usd_after, leverage_after, net_delta_after_btc."""
+    """ctx (all USD): order_notional_usd, notional_usd_after, leverage_after, net_delta_usd_after."""
     if kill_active():
         return False, "KILL_SWITCH active — trading halted"
-    q = abs(order.qty)
-    if q < config.MIN_ORDER_BTC:
-        return False, f"order {q} < min {config.MIN_ORDER_BTC} BTC"
-    if q > config.MAX_ORDER_BTC:
-        return False, f"order {q} > max {config.MAX_ORDER_BTC} BTC"
+    on = ctx.get("order_notional_usd", 0)
+    if on < config.MIN_ORDER_USD:
+        return False, f"order ${on:,.0f} < min ${config.MIN_ORDER_USD:,.0f}"
+    if on > config.MAX_ORDER_USD:
+        return False, f"order ${on:,.0f} > max ${config.MAX_ORDER_USD:,.0f}"
     if ctx.get("notional_usd_after", 0) > config.MAX_NOTIONAL_USD:
         return False, f"notional ${ctx['notional_usd_after']:,.0f} > cap ${config.MAX_NOTIONAL_USD:,.0f}"
     if ctx.get("leverage_after", 0) > config.MAX_LEVERAGE:
         return False, f"leverage {ctx['leverage_after']:.2f} > cap {config.MAX_LEVERAGE}"
-    if abs(ctx.get("net_delta_after_btc", 0)) > config.MAX_ABS_DELTA_BTC + 1e-9:
-        return False, f"net delta {ctx['net_delta_after_btc']:+.4f} outside band ±{config.MAX_ABS_DELTA_BTC}"
+    if abs(ctx.get("net_delta_usd_after", 0)) > config.MAX_ABS_DELTA_USD + 1e-6:
+        return False, f"net delta ${ctx['net_delta_usd_after']:+,.0f} outside band ±${config.MAX_ABS_DELTA_USD:,.0f}"
     return True, "ok"
