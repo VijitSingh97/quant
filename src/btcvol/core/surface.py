@@ -134,6 +134,32 @@ def skew_iv(coeffs, atm, T, K, S):
     return max(0.05, atm * (a0 + a1 * x + a2 * x * x))
 
 
+_Q25 = 0.6744897501960817      # |Phi^-1(0.25)| — standardized-moneyness of a 25-delta strike
+_Q10 = 1.2815515594457831      # |Phi^-1(0.10)| — ~10-delta strike
+
+
+def skew_from_metrics(atm, rr25, bf25, rr10=None, bf10=None):
+    """Reconstruct the parametric skew (a0,a1,a2) from LOGGED smile metrics.
+
+    Inverts RR/BF back into IV/ATM ratios at the 25Δ (and 10Δ) standardized-moneyness
+    points (x ≈ the normal quantile of the delta), then least-squares fits the same
+    quadratic skew_iv() uses. Lets the historical-skew backtest (#6) price each roll
+    with the skew we captured that day instead of one static live fit.
+    """
+    if not atm or atm <= 0:
+        return (1.0, 0.0, 0.0)
+    pts = [(0.0, 1.0)]
+    if rr25 is not None and bf25 is not None:
+        pts += [(+_Q25, (atm + bf25 + rr25 / 2) / atm),
+                (-_Q25, (atm + bf25 - rr25 / 2) / atm)]
+    if rr10 is not None and bf10 is not None:
+        pts += [(+_Q10, (atm + bf10 + rr10 / 2) / atm),
+                (-_Q10, (atm + bf10 - rr10 / 2) / atm)]
+    if len(pts) < 3:
+        return (1.0, 0.0, 0.0)
+    return tuple(polyfit2([p[0] for p in pts], [p[1] for p in pts]))
+
+
 def summary_metrics(surface, ref_dte=30):
     """Headline surface metrics for logging: ATM, RR25, BF25 at ~ref_dte, plus the
     ATM term-structure slope (~90d minus front). Returns {} if the surface is empty."""

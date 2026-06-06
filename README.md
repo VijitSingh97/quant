@@ -116,7 +116,8 @@ quant/
 │   │   ├── vrp.py            volatility-risk-premium backtest (naked)
 │   │   ├── structures.py     monthly condor-rule backtest (flat or --skew)
 │   │   ├── combined.py       carry + filtered-condor combined-book backtest
-│   │   └── robustness.py     param sweep / walk-forward / cost anti-overfit checks
+│   │   ├── robustness.py     param sweep / walk-forward / cost anti-overfit checks
+│   │   └── histskew.py       historical-skew condor backtest on our logged data (#6)
 │   └── core/                 shared layer (no presentation)
 │       ├── http.py           keyless REST helpers
 │       ├── stats.py          vol math: cc/parkinson vol, sharpe, drawdown
@@ -225,10 +226,8 @@ keep [#4](https://github.com/VijitSingh97/quant/issues/4) accumulating before si
 ## Roadmap
 
 The roadmap is tracked in **[GitHub Issues](https://github.com/VijitSingh97/quant/issues)** —
-completed work is closed there (each feature commit references its issue), open work is:
+completed work is closed there (each feature commit references its issue). All build-able
+items are done; the two open issues are now **data-gated, not code-gated**:
 
 - [#4](https://github.com/VijitSingh97/quant/issues/4) — data-accumulation tracker (always-on; do not close)
-- [#6](https://github.com/VijitSingh97/quant/issues/6) — historical-skew condor backtest (blocked on #4 accruing)
-- [#9](https://github.com/VijitSingh97/quant/issues/9) — multi-asset (ETH/SOL/XRP/BNB + PAXG gold proxy)
-- [#10](https://github.com/VijitSingh97/quant/issues/10) — cross-asset equities/commodities/macro adapters
-- [#11](https://github.com/VijitSingh97/quant/issues/11) — richer log fields + extend free history backfill
+- [#6](https://github.com/VijitSingh97/quant/issues/6) — historical-skew condor backtest: the tool (`btcvol.backtests.histskew`) is **built and tested**; it degrades gracefully until the logger has a few months of skew history, then prints logged-skew vs static-skew side by side.

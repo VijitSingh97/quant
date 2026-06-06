@@ -70,6 +70,23 @@ def test_summary_metrics_empty_surface():
     assert sf.summary_metrics({"S": 60000, "expiries": []}) == {}
 
 
+def test_skew_from_metrics_round_trips():
+    coeffs = (1.0, -0.12, 0.07)
+    atm = 0.5
+    Q25, Q10 = 0.6744897501960817, 1.2815515594457831
+    ratio = lambda x: coeffs[0] + coeffs[1] * x + coeffs[2] * x * x
+    c25, p25 = atm * ratio(Q25), atm * ratio(-Q25)
+    c10, p10 = atm * ratio(Q10), atm * ratio(-Q10)
+    rec = sf.skew_from_metrics(atm, c25 - p25, (c25 + p25) / 2 - atm,
+                               c10 - p10, (c10 + p10) / 2 - atm)
+    assert all(abs(a - b) < 1e-9 for a, b in zip(rec, coeffs))
+
+
+def test_skew_from_metrics_degenerate():
+    assert sf.skew_from_metrics(0, -0.05, 0.01) == (1.0, 0.0, 0.0)        # bad atm
+    assert sf.skew_from_metrics(0.5, None, None) == (1.0, 0.0, 0.0)       # no metrics
+
+
 def test_summary_metrics_tail_skew_and_pc_oi():
     surf = {"S": 60000, "expiries": [
         {"name": "B", "dte": 30, "atm": 0.50, "rr25": -0.08, "bf25": 0.01,
