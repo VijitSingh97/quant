@@ -224,6 +224,45 @@ def bybit_all_funding():
             for d in lst if d.get("symbol", "").endswith("USDT") and d.get("fundingRate")}
 
 
+def gate_all_funding():
+    """All Gate.io USDT perps -> {coin: apr} in one call (usually reachable; ~700 markets).
+    funding_interval is per-contract seconds, so annualize exactly."""
+    data = http_get("https://api.gateio.ws/api/v4/futures/usdt/contracts")
+    out = {}
+    for d in data:
+        name, fr = d.get("name", ""), d.get("funding_rate")
+        if not name.endswith("_USDT") or fr is None:
+            continue
+        interval = float(d.get("funding_interval") or 28800)        # default 8h
+        out[name[:-5]] = float(fr) * (31536000.0 / interval)
+    return out
+
+
+def kucoin_all_funding():
+    """All KuCoin USDT-margined perps -> {coin: apr} in one call (funding is 8h)."""
+    data = http_get("https://api-futures.kucoin.com/api/v1/contracts/active")["data"]
+    out = {}
+    for d in data:
+        sym, fr = d.get("symbol", ""), d.get("fundingFeeRate")
+        if not sym.endswith("USDTM") or fr is None:
+            continue
+        coin = sym[:-5]
+        out["BTC" if coin == "XBT" else coin] = float(fr) * 3 * 365   # XBT is KuCoin's BTC ticker
+    return out
+
+
+def dydx_all_funding():
+    """All dYdX v4 perps -> {coin: apr} in one call (nextFundingRate is hourly)."""
+    markets = http_get("https://indexer.dydx.trade/v4/perpetualMarkets")["markets"]
+    out = {}
+    for ticker, m in markets.items():
+        fr = m.get("nextFundingRate")
+        if fr is None:
+            continue
+        out[ticker.split("-")[0]] = float(fr) * 24 * 365
+    return out
+
+
 def deribit_option_chain(currency="BTC", index_name="btc_usd"):
     """Live BTC option chain -> {'index', 'options': [...]}.
 

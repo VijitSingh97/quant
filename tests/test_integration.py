@@ -14,6 +14,7 @@ from basis.core.sources import (
     hyperliquid_perp, hl_all_funding, hl_funding_stats, coinbase_spot_and_candles,
     deribit_vol_and_basis, deribit_dvol, deribit_option_chain, deribit_funding_history,
     okx_perp, yahoo_chart, tardis_options_chain, binance_all_funding, bybit_all_funding,
+    gate_all_funding, kucoin_all_funding, dydx_all_funding,
 )
 from basis.live.exchanges.hyperliquid import HyperliquidClient
 
@@ -115,3 +116,19 @@ def test_binance_all_funding_if_reachable():
 def test_bybit_all_funding_if_reachable():
     m = fetch(bybit_all_funding)            # 403 in many regions -> skip
     assert "BTC" in m and isinstance(m["BTC"], float)
+
+
+# --- Additional cross-venue funding sources (usually reachable; one call each) ---
+def test_gate_all_funding_shape():
+    m = fetch(gate_all_funding)
+    assert "BTC" in m and isinstance(m["BTC"], float) and len(m) > 100
+
+
+def test_kucoin_all_funding_shape():
+    m = fetch(kucoin_all_funding)
+    assert "BTC" in m and isinstance(m["BTC"], float) and len(m) > 100   # XBT normalised to BTC
+
+
+def test_dydx_all_funding_shape():
+    m = fetch(dydx_all_funding)
+    assert "BTC" in m and isinstance(m["BTC"], float) and len(m) > 20

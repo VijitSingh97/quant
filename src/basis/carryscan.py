@@ -17,10 +17,16 @@ Run:  python3 -m basis.carryscan [--min-oi 10] [--top 15] [--days 14]
 import argparse
 
 from .core import fmt_pct, safe
-from .core.sources import (hl_all_funding, hl_funding_stats,
-                           binance_all_funding, bybit_all_funding)
+from .core.sources import (hl_all_funding, hl_funding_stats, binance_all_funding,
+                           bybit_all_funding, gate_all_funding, kucoin_all_funding,
+                           dydx_all_funding)
 
 MAJORS = {"BTC", "ETH", "SOL"}        # deep spot + perp -> cleanly deployable carry
+
+# cross-venue funding sources (one call each). HL is the breadth base + persistence stats;
+# these add cross-venue funding so we can spot the same asset paying differently by venue.
+VENUES = {"Binance": binance_all_funding, "Bybit": bybit_all_funding,
+          "Gate": gate_all_funding, "KuCoin": kucoin_all_funding, "dYdX": dydx_all_funding}
 
 
 def _tier(oi):
@@ -29,9 +35,8 @@ def _tier(oi):
 
 def run(min_oi_musd=10.0, top=15, days=14):
     hl = safe("Hyperliquid", hl_all_funding) or {}
-    binance = safe("Binance", binance_all_funding) or {}
-    bybit = safe("Bybit", bybit_all_funding) or {}
-    venues_up = ["HL"] + (["Binance"] if binance else []) + (["Bybit"] if bybit else [])
+    other = {name: (safe(name, fn) or {}) for name, fn in VENUES.items()}
+    venues_up = ["HL"] + [name for name, d in other.items() if d]
 
     liquid = sorted(((c, d) for c, d in hl.items() if d["oi_usd"] >= min_oi_musd * 1e6),
                     key=lambda kv: kv[1]["apr"], reverse=True)
@@ -41,20 +46,22 @@ def run(min_oi_musd=10.0, top=15, days=14):
     for coin, d in cands:
         st = safe(coin, lambda c=coin: hl_funding_stats(c, days))
         cross = {"HL": d["apr"]}
-        if coin in binance:
-            cross["Binance"] = binance[coin]
-        if coin in bybit:
-            cross["Bybit"] = bybit[coin]
+        for name, fund in other.items():
+            if coin in fund:
+                cross[name] = fund[coin]
         best_v = max(cross, key=cross.get)
+        worst_v = min(cross, key=cross.get)
         rows.append({"coin": coin, "now": d["apr"], "oi": d["oi_usd"], "stats": st,
-                     "best_v": best_v, "best": cross[best_v],
-                     "spread": max(cross.values()) - min(cross.values()) if len(cross) > 1 else 0.0})
+                     "best_v": best_v, "best": cross[best_v], "worst_v": worst_v,
+                     "cross": cross,
+                     "spread": cross[best_v] - cross[worst_v] if len(cross) > 1 else 0.0})
     rows.sort(key=lambda r: (r["stats"]["avg"] if r["stats"] else r["now"]), reverse=True)
 
     bar = "=" * 86
     print(f"\n{bar}\nCARRY SCANNER — best perp markets by PERSISTENT funding ({days}d avg)\n{bar}")
+    down = [name for name, d in other.items() if not d]
     print(f"{len(hl)} HL perps scanned · venues up: {', '.join(venues_up)}"
-          + ("" if (binance or bybit) else "  (Binance/Bybit geo-blocked here — HL is the breadth base)"))
+          + (f"  (unreachable here: {', '.join(down)})" if down else ""))
     print(f"\n  {'coin':7} {'now':>8} {f'{days}d avg':>9} {'%hrs+':>6} {'range (lo..hi)':>18} {'OI':>8} {'best venue':>11}  notes")
     for r in rows[:top]:
         st = r["stats"]
@@ -79,6 +86,17 @@ def run(min_oi_musd=10.0, top=15, days=14):
             avg = fmt_pct(st["avg"]) if st else "n/a"
             print(f"    {c:5} now {fmt_pct(hl[c]['apr']):>8}   {days}d avg {avg:>8}   ${hl[c]['oi_usd']/1e6:,.0f}M OI")
 
+    # cross-venue funding SPREADS — same asset paying differently by venue (perp-vs-perp arb
+    # candidates: long the perp where funding is most negative, short where most positive).
+    spreads = sorted((r for r in rows if r["spread"] > 0.05 and len(r["cross"]) > 1),
+                     key=lambda r: r["spread"], reverse=True)
+    if spreads:
+        print(f"\n  cross-venue funding spreads (perp-vs-perp arb candidates — no spot leg needed):")
+        for r in spreads[:6]:
+            legs = "  ".join(f"{v}:{fmt_pct(a)}" for v, a in sorted(r["cross"].items(),
+                                                                    key=lambda kv: kv[1], reverse=True))
+            print(f"    {r['coin']:7} spread {fmt_pct(r['spread']):>8}   short {r['best_v']} / long {r['worst_v']}   [{legs}]")
+
     top_row = rows[0] if rows else None
     print(f"\n{bar}\nREAD\n{bar}")
     if top_row and top_row["stats"]:
@@ -87,9 +105,12 @@ def run(min_oi_musd=10.0, top=15, days=14):
     print("• Rank by the AVERAGE, not the instantaneous rate — a high avg with a wild range (PURR-type) is")
     print("  a trap. Persistent + tight + high %hrs-positive = a real inefficiency you can harvest.")
     print("• You still need a spot leg to be delta-neutral; alts without co-located spot need cross-venue spot.")
-    if not (binance or bybit):
-        print("• Binance/Bybit are geo-blocked from this machine, so cross-venue is HL-only here; the code")
-        print("  pulls them automatically where reachable.")
+    if spreads:
+        print(f"• Cross-venue spreads above net the funding DIFFERENCE delta-neutrally via two perps (no spot),")
+        print(f"  but cost 2x fees + margin on both venues + transfer to rebalance — only worth it above ~20-40% APR.")
+    if down:
+        print(f"• Unreachable from here ({', '.join(down)}) are geo/network-blocked; a VPS in an allowed region")
+        print(f"  would add them — the code pulls every venue automatically where reachable.")
 
 
 def main():
