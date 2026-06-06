@@ -62,6 +62,7 @@ A `Makefile` wraps the common commands: `make dashboard`, `make monitor`,
 | `basis.monitor` / `basis-monitor` | Live perp funding across 4 venues, normalized to APR, plus the cross-venue spread / arb flag. |
 | `basis.size` / `basis-size` | **Position sizer.** Vol-target scale (halve size when vol doubles) + fractional-Kelly stake from a win-rate/payoff. Flags: `--target-vol`, `--position-vol`, `--win-prob`, `--win-loss`. |
 | `basis.backtests.rotation` / `basis-rotation` | **Backtests carry ROTATION vs fixed**, net of cost. Pulls HL hourly funding for the spot-able universe (BTC/ETH/SOL/HYPE), runs the *real* `select_asset` rule (trailing-avg rank + hysteresis), and compares rotating vs holding each fixed asset — APR, Sharpe, maxDD, switch count, cost drag, and a verdict. Validates whether `live-auto` is worth running. `--days`, `--window`, `--switch-margin`, `--cost-bps`, `--universe`. |
+| `basis.backtests.regime` / `basis-regime` | **Regime study** (issue #17 Phase A): does allocating carry-vs-vol *by regime* beat always-carry? Builds per-block carry + defined-risk-condor return streams, classifies each block by VRP (DVOL−RV) and vol-of-vol (causally, expanding medians — no look-ahead), and compares **always-carry vs static-combined vs regime-weighted** net of cost, with a verdict. Research only — the vol leg is modelled, not live. `--leverage`, `--risk`, `--asset`. |
 | `basis.carryscan` / `basis-carry-scan` | **Cross-asset/venue carry scanner.** Scans **all** Hyperliquid perps (230, not just BTC) and ranks by **persistent** funding (multi-day average + % hours positive), surfacing structurally-hot, inefficiently-priced markets (e.g. XMR ~+32%, hard-to-short) vs one-hour spikes (PURR). Pulls Binance/Bybit where reachable for cross-venue best-market/spread. `--min-oi`, `--top`, `--days`. |
 | `basis.book` / `basis-book` | **Delta-neutral book monitor.** Reads a positions file (spot/perp/option legs), prices each leg's delta off the live chain, reports net delta (BTC + USD), and suggests the perp hedge to flatten. `--threshold`, `--strict` (exit nonzero on drift). See `examples/positions.example.json`. |
 | `basis.analyze` / `basis-analyze` | Summarizes our **own captured** `data/timeseries.csv`: VRP, funding, skew (RR25/BF25/RR10), basis/OI distributions and exploratory correlations. Degrades gracefully with little history. |
@@ -244,7 +245,7 @@ make test              # offline unit suite (default, ~0.1s)
 make test-integration  # opt-in: hit live venues and assert response shapes
 ```
 
-**141 tests, fully offline** (no network — the suite runs in ~0.2s). Coverage spans the
+**148 tests, fully offline** (no network — the suite runs in ~0.2s). Coverage spans the
 pure logic: vol math / Sharpe / drawdown / Pearson, Black-Scholes + greeks + strike-from-
 delta, the IV-surface smile/skew fit, position sizing, the asset registry, the backtest
 factor math (incl. the rotation `compute`/curve/alignment helpers), the auto-selector
@@ -253,9 +254,10 @@ execution path (paper-exchange fills, funding accrual, the reconcile loop's delt
 convergence, and the auto allocator's flatten) is tested via a fixed-mark exchange. The
 **deployment/resilience layer** is covered too: the HTTP retry/backoff (retries transient
 errors, fast-fails geo-blocks), SQLite WAL mode, the `BASIS_DATA_DIR` override, the
-scheduler's per-cycle failure isolation, the container healthcheck's exit codes, and the
-**self-validation** (mocked-funding report shape, due/throttle logic, report storage) —
-all without touching the network.
+scheduler's per-cycle failure isolation, the container healthcheck's exit codes, the
+**self-validation** (report shape, due/throttle, storage, and the **walk-forward** OOS
+guard), the **fee model** (fees reduce equity + are tracked), and the **regime study**
+helpers — all without touching the network.
 
 **Integration suite (opt-in, `-m integration`)** — 14 live-venue *smoke* tests that hit
 the real endpoints (Hyperliquid, Coinbase, Deribit, OKX, Yahoo, Tardis, + the read-only
@@ -319,6 +321,6 @@ Data-gated (built, waiting on accumulated history):
 - [#4](https://github.com/VijitSingh97/quant/issues/4) — data-accumulation tracker (always-on; do not close)
 - [#6](https://github.com/VijitSingh97/quant/issues/6) — historical-skew condor backtest: the tool (`basis.backtests.histskew`) is **built and tested**; it degrades gracefully until the logger has a few months of skew history, then prints logged-skew vs static-skew side by side.
 
-Researched / scoped (the bigger next steps):
-- [#17](https://github.com/VijitSingh97/quant/issues/17) — **regime-based strategy switch** (allocate carry vs defined-risk vol by regime; needs a live options-execution path first).
-- [#18](https://github.com/VijitSingh97/quant/issues/18) — **guarded parameter auto-tuner** (walk-forward + human approval) building on the scheduled self-validation.
+In progress (Phase A done, more scoped in the issue):
+- [#17](https://github.com/VijitSingh97/quant/issues/17) — **regime-based strategy switch**. Phase A (the `basis.backtests.regime` study) is **built** — it backtests carry-vs-vol allocation by regime. Phase B (a live options-execution path so the vol leg can actually trade) remains.
+- [#18](https://github.com/VijitSingh97/quant/issues/18) — **guarded parameter auto-tuner**. Phase A (walk-forward out-of-sample scoring in the self-validation) is **built** — suggestions now only fire if they beat current *out-of-sample*. Phase B (approval gate + bounded apply/rollback) remains.
