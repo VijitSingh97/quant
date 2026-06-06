@@ -198,6 +198,11 @@ async function tick(){
   } else {
     $('valState').textContent='no validation report yet — runs weekly as data accumulates';
   }
+  const ov=s.overrides||{};
+  if(Object.keys(ov).length){
+    const parts=Object.entries(ov).map(([k,val])=>k.replace('AUTO_','').toLowerCase()+'='+val);
+    $('valState').innerHTML+=` <span class="amb">· tuned overrides applied: ${parts.join(', ')}</span>`;
+  }
 
   $('log').innerHTML=(s.audit||[]).map(e=>{
     const tm=new Date(e.ts*1000).toLocaleTimeString();

@@ -7,16 +7,34 @@ Env vars are read as BASIS_* and fall back to the legacy BTCVOL_* names, so an
 existing .env or launchd agent keeps working after the rename.
 """
 
+import json
 import os
 
 from ..core.paths import DATA_DIR
 
+# Tuner-applied parameter overrides (written by `basis-tune`, read here on start).
+# Precedence: explicit env var > overrides file > hardcoded default. So an operator's
+# env always wins; the tuner's persisted choices apply otherwise. (#18 Phase B)
+OVERRIDES_PATH = DATA_DIR / "overrides.json"
+
+
+def load_overrides():
+    try:
+        return json.loads(OVERRIDES_PATH.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+_OVERRIDES = load_overrides()
+
 
 def _env(name, default=None):
-    """BASIS_<name>, falling back to legacy BTCVOL_<name> (back-compat)."""
+    """BASIS_<name> env > legacy BTCVOL_<name> env > tuner override > default."""
     v = os.environ.get(f"BASIS_{name}")
     if v is None:
         v = os.environ.get(f"BTCVOL_{name}")
+    if v is None and name in _OVERRIDES:
+        v = _OVERRIDES[name]
     return default if v is None else v
 
 

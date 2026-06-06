@@ -118,21 +118,27 @@ class Store:
 
     # --- research: validation reports + metrics timeseries (research.db) ---
     def add_report(self, kind, summary, data):
-        self.db.execute("INSERT INTO reports(ts, kind, summary, data) VALUES (?,?,?,?)",
-                        (time.time(), kind, summary, json.dumps(data, default=str)))
+        cur = self.db.execute("INSERT INTO reports(ts, kind, summary, data) VALUES (?,?,?,?)",
+                              (time.time(), kind, summary, json.dumps(data, default=str)))
         self.db.commit()
+        return cur.lastrowid
 
     def latest_report(self, kind):
-        r = self.db.execute("SELECT ts, kind, summary, data FROM reports WHERE kind=? "
+        r = self.db.execute("SELECT id, ts, kind, summary, data FROM reports WHERE kind=? "
                             "ORDER BY id DESC LIMIT 1", (kind,)).fetchone()
+        return self._report_row(r) if r else None
+
+    def get_report(self, report_id):
+        r = self.db.execute("SELECT id, ts, kind, summary, data FROM reports WHERE id=?",
+                            (report_id,)).fetchone()
         return self._report_row(r) if r else None
 
     def recent_reports(self, kind=None, n=20):
         if kind:
-            cur = self.db.execute("SELECT ts, kind, summary, data FROM reports WHERE kind=? "
+            cur = self.db.execute("SELECT id, ts, kind, summary, data FROM reports WHERE kind=? "
                                   "ORDER BY id DESC LIMIT ?", (kind, n))
         else:
-            cur = self.db.execute("SELECT ts, kind, summary, data FROM reports ORDER BY id DESC LIMIT ?", (n,))
+            cur = self.db.execute("SELECT id, ts, kind, summary, data FROM reports ORDER BY id DESC LIMIT ?", (n,))
         return [self._report_row(r) for r in cur.fetchall()]
 
     @staticmethod

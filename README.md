@@ -6,6 +6,9 @@ income from crypto. It's built around two engines — **delta-neutral funding ca
 **defined-risk volatility selling** — plus the live data, backtests, and a
 paper-first execution layer to decide *when* each is worth running and to run it.
 
+> **New here?** Start with the **[User Guide (GUIDE.md)](GUIDE.md)** — install, run, read
+> the dashboard, and tune for better returns in ~10 minutes.
+
 > **Disclaimer.** Educational tooling, **not investment advice**. Backtests smooth
 > over fees, skew, slippage, and the tail events that actually blow up short-vol and
 > levered-carry books. Crypto leverage can liquidate you fast. Size accordingly.
@@ -136,7 +139,7 @@ See [README_live.md](README_live.md#deploy-on-a-home-server-docker--recommended)
 quant/
 ├── pyproject.toml            packaging + console scripts + pytest config
 ├── Makefile                  convenience targets
-├── README.md  LICENSE  .gitignore
+├── README.md  README_live.md  GUIDE.md  LICENSE  .gitignore
 ├── src/basis/
 │   ├── __init__.py
 │   ├── dashboard.py          market snapshot + interpretation
@@ -177,6 +180,7 @@ quant/
 │       ├── engine.py         fixed-asset reconcile engine
 │       ├── auto.py           auto-rotating allocator
 │       ├── validate.py       scheduled self-validation (re-check rule weekly, suggest)
+│       ├── tune.py           guarded apply path for suggestions (bounded/audited/reversible)
 │       ├── scheduler.py      supervisor loop (container) — runs cycles, self-heals
 │       ├── healthcheck.py    container HEALTHCHECK (heartbeat freshness)
 │       ├── status.py         shared status (CLI + web)
@@ -245,7 +249,7 @@ make test              # offline unit suite (default, ~0.1s)
 make test-integration  # opt-in: hit live venues and assert response shapes
 ```
 
-**148 tests, fully offline** (no network — the suite runs in ~0.2s). Coverage spans the
+**153 tests, fully offline** (no network — the suite runs in ~0.2s). Coverage spans the
 pure logic: vol math / Sharpe / drawdown / Pearson, Black-Scholes + greeks + strike-from-
 delta, the IV-surface smile/skew fit, position sizing, the asset registry, the backtest
 factor math (incl. the rotation `compute`/curve/alignment helpers), the auto-selector
@@ -256,8 +260,8 @@ convergence, and the auto allocator's flatten) is tested via a fixed-mark exchan
 errors, fast-fails geo-blocks), SQLite WAL mode, the `BASIS_DATA_DIR` override, the
 scheduler's per-cycle failure isolation, the container healthcheck's exit codes, the
 **self-validation** (report shape, due/throttle, storage, and the **walk-forward** OOS
-guard), the **fee model** (fees reduce equity + are tracked), and the **regime study**
-helpers — all without touching the network.
+guard), the **fee model** (fees reduce equity + are tracked), the **regime study**
+helpers, and the **guarded tuner** (bounds, apply, rollback, reset) — all offline.
 
 **Integration suite (opt-in, `-m integration`)** — 14 live-venue *smoke* tests that hit
 the real endpoints (Hyperliquid, Coinbase, Deribit, OKX, Yahoo, Tardis, + the read-only
@@ -321,6 +325,6 @@ Data-gated (built, waiting on accumulated history):
 - [#4](https://github.com/VijitSingh97/quant/issues/4) — data-accumulation tracker (always-on; do not close)
 - [#6](https://github.com/VijitSingh97/quant/issues/6) — historical-skew condor backtest: the tool (`basis.backtests.histskew`) is **built and tested**; it degrades gracefully until the logger has a few months of skew history, then prints logged-skew vs static-skew side by side.
 
-In progress (Phase A done, more scoped in the issue):
-- [#17](https://github.com/VijitSingh97/quant/issues/17) — **regime-based strategy switch**. Phase A (the `basis.backtests.regime` study) is **built** — it backtests carry-vs-vol allocation by regime. Phase B (a live options-execution path so the vol leg can actually trade) remains.
-- [#18](https://github.com/VijitSingh97/quant/issues/18) — **guarded parameter auto-tuner**. Phase A (walk-forward out-of-sample scoring in the self-validation) is **built** — suggestions now only fire if they beat current *out-of-sample*. Phase B (approval gate + bounded apply/rollback) remains.
+Recently completed (both closed):
+- [#18](https://github.com/VijitSingh97/quant/issues/18) — **guarded parameter tuner** ✅ done. Walk-forward out-of-sample scoring in the self-validation (suggestions only fire if they beat current OOS) **and** the bounded, audited, reversible `basis-tune` apply path. Suggests-only; you approve.
+- [#17](https://github.com/VijitSingh97/quant/issues/17) — **regime-based strategy switch** ✅ researched & closed. The `basis.backtests.regime` study found regime-conditioning does **not** beat always-carry on risk-adjusted return (carry's the workhorse; the condor is a marginal hedge), so the heavy live-options-execution layer is **deferred** — revisit when `#4` has accumulated more history.

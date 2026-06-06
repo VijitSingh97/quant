@@ -259,10 +259,23 @@ config. It only recommends a change if re-tuning beats current **out-of-sample**
 otherwise it explicitly says *"in-sample sweep prefers X, but it does NOT generalise —
 keep current."* The report carries both the in-sample sweep and the walk-forward verdict.
 
-It **only suggests — it never changes live config.** Auto-tuning parameters on live
-capital is how you overfit yourself into a loss, so suggestions are left for you to apply
-by hand. (The remaining Phase B — an approval gate + bounded apply/rollback — stays in
-[issue #18](https://github.com/VijitSingh97/quant/issues/18); a regime-based carry-vs-vol
+**Applying a suggestion — guarded (`basis-tune`, issue #18 Phase B — done).** It still
+**never auto-applies**; you apply by hand, and the path is guarded:
+
+```bash
+make tune                       # or: basis-tune --list   — suggestions + report ids + current overrides
+basis-tune --apply <report_id>  # apply a recommendation (bounded; only ones that beat current OOS)
+docker compose restart basis    # take effect
+basis-tune --rollback           # undo the last change   ·   basis-tune --reset  (back to defaults)
+```
+
+Every apply is **bounded** (out-of-range values rejected), **out-of-sample-gated** (refuses
+a report that didn't beat current out-of-sample, unless `--force`), **audited** (logged to
+`research.db` with from→to + the report id), and **reversible**. It writes
+`data/overrides.json` (env vars still win over it); the dashboard shows when tuned
+overrides are active. The scheduler never tunes — you are the approval.
+
+(A regime-based carry-vs-vol
 switch is [issue #17](https://github.com/VijitSingh97/quant/issues/17).)
 
 In the container the `validate` task is in the scheduler's task list and **self-throttles**
