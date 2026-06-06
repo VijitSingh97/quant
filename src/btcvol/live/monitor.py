@@ -52,10 +52,16 @@ def main():
             posf = f"{o['pos_frac']*100:.0f}%" if o["pos_frac"] is not None else "—"
             print(f"    {o['coin']:7} {fmt_pct(o['avg_apr']):>9} {fmt_pct(o['now_apr']):>8} {posf:>6} "
                   f"${o['oi_usd']/1e6:>6.0f}M{here}")
-        print(f"\n  TRADING: engine deploys {sym} (FIXED, auto-rotate OFF) at {fmt_pct(m['funding_apr'])} now.")
-        if best["coin"] != sym:
-            print(f"           best persistent carry is {best['coin']} ({fmt_pct(best['avg_apr'])} 14d-avg) — "
-                  f"NOT being traded (no auto-selection yet).")
+        if s["deployed"]["auto_rotate"]:
+            print(f"\n  AUTO-ROTATING: holding {sym} at {fmt_pct(m['funding_apr'])} (best spot-able persistent carry).")
+            if best["coin"] != sym:
+                print(f"                {best['coin']} is hotter ({fmt_pct(best['avg_apr'])} 14d-avg) but excluded "
+                      f"(no co-located spot / filters).")
+        else:
+            print(f"\n  TRADING: engine deploys {sym} (FIXED, auto-rotate OFF) at {fmt_pct(m['funding_apr'])} now.")
+            if best["coin"] != sym:
+                print(f"           best persistent carry is {best['coin']} ({fmt_pct(best['avg_apr'])} 14d-avg) — "
+                      f"NOT traded (run `make live-auto` to auto-select).")
 
     print(f"\n  {s['config']}")
     print(f"\n  recent audit trail:")

@@ -36,8 +36,18 @@ MAX_ABS_DELTA_USD = _f("BTCVOL_MAX_ABS_DELTA_USD", "1200")   # net-delta reconci
 MAX_ORDER_USD = _f("BTCVOL_MAX_ORDER_USD", "3000")
 MIN_ORDER_USD = _f("BTCVOL_MIN_ORDER_USD", "10")
 
+# --- auto-selection (rotating carry: pick the best asset from the funding scan) ---
+AUTO_MIN_FUNDING = _f("BTCVOL_AUTO_MIN_FUNDING", "0.05")        # min 14d-avg APR to deploy
+AUTO_OI_FLOOR_USD = _f("BTCVOL_AUTO_OI_FLOOR_USD", "20000000")  # liquidity floor
+AUTO_SWITCH_MARGIN = _f("BTCVOL_AUTO_SWITCH_MARGIN", "0.05")    # new must beat held by this APR
+AUTO_EXIT_FUNDING = _f("BTCVOL_AUTO_EXIT_FUNDING", "0.0")       # exit held if its avg drops below
+AUTO_SPOT_ANY = os.environ.get("BTCVOL_AUTO_SPOT_ANY", "0") == "1"
+AUTO_SPOT_UNIVERSE = {s for s in os.environ.get(
+    "BTCVOL_AUTO_SPOT_UNIVERSE", "BTC,ETH,SOL,HYPE").upper().split(",") if s}
+
 # --- paths ---
-DB_PATH = DATA_DIR / ("live.db" if SYMBOL == "BTC" else f"live_{SYMBOL.lower()}.db")
+_db = os.environ.get("BTCVOL_DB")
+DB_PATH = (DATA_DIR / _db) if _db else (DATA_DIR / ("live.db" if SYMBOL == "BTC" else f"live_{SYMBOL.lower()}.db"))
 KILL_FILE = DATA_DIR / "KILL_SWITCH"          # presence halts ALL trading (any asset)
 
 

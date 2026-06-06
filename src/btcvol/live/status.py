@@ -11,14 +11,15 @@ from .allocator import carry_target
 from ..core.sources import hyperliquid_perp, deribit_dvol
 
 
-def market_snapshot():
-    hl = hyperliquid_perp(config.SYMBOL)
+def market_snapshot(symbol=None):
+    symbol = symbol or config.SYMBOL
+    hl = hyperliquid_perp(symbol)
     try:
         dv = deribit_dvol(days=2, resolution="1D")
         dvol = dv[-1][1] if dv else None
     except Exception:       # noqa: BLE001
         dvol = None
-    return {"mark": hl["mark"], "funding_apr": hl["funding_apr"],
+    return {"symbol": symbol, "mark": hl["mark"], "funding_apr": hl["funding_apr"],
             "funding_rate_1h": hl["funding_rate_1h"], "dvol": dvol, "ts": time.time()}
 
 
@@ -62,7 +63,10 @@ def live_account(client):
 
 
 def build_status(store, market=None, include_live=True, opps=None):
-    market = market or market_snapshot()
+    # the displayed asset is whatever the book holds (auto allocator), else the configured one
+    symbol = store.get_meta("held_symbol") or config.SYMBOL
+    if market is None or (market.get("symbol") and market["symbol"] != symbol):
+        market = market_snapshot(symbol)
     pnl = store.latest_pnl()
     equity = pnl["equity_usd"] if pnl else config.CAPITAL_BTC * market["mark"]
     book = paper_book(store)
@@ -71,14 +75,15 @@ def build_status(store, market=None, include_live=True, opps=None):
         from .exchanges.hyperliquid import HyperliquidClient
         live = live_account(HyperliquidClient())
     return {
-        "ts": time.time(), "mode": config.MODE, "venue": config.VENUE, "symbol": config.SYMBOL,
+        "ts": time.time(), "mode": config.MODE, "venue": config.VENUE, "symbol": symbol,
         "kill": config.KILL_FILE.exists(),
         "market": market,
         "carry_on": (market["funding_apr"] > 0) or (not config.FUNDING_TIMED),
         "target": carry_target(equity, market["mark"], market["funding_apr"]),
         "paper": book, "live": live, "equity": equity,
         # cross-asset opportunities + whether the engine actually trades the best
-        "deployed": {"symbol": config.SYMBOL, "funding_apr": market["funding_apr"], "auto_rotate": False},
+        "deployed": {"symbol": symbol, "funding_apr": market["funding_apr"],
+                     "auto_rotate": store.get_meta("auto") == "1"},
         "opportunities": opps,
         "config": config.summary(),
         "pnl_history": store.pnl_history(300),

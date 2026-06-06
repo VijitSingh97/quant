@@ -1,6 +1,6 @@
 PY := PYTHONPATH=src python3
 
-.PHONY: help install dev test dashboard monitor carry vrp combined histskew robust condor-bt structures skew book size analyze macro backfill carry-scan histskew2 live-paper live-monitor live-web log launchd-install launchd-uninstall clean
+.PHONY: help install dev test dashboard monitor carry vrp combined histskew robust condor-bt structures skew book size analyze macro backfill carry-scan histskew2 live-paper live-auto live-monitor live-web log launchd-install launchd-uninstall clean
 
 help:
 	@echo "make install            editable install (pip install -e .)"
@@ -24,6 +24,7 @@ help:
 	@echo "make carry-scan         rank cross-asset funding (best carry to deploy now)"
 	@echo "make histskew2          condor with REAL historical skew (Tardis) vs static"
 	@echo "make live-paper         run one paper reconcile cycle (carry, no real money)"
+	@echo "make live-auto          auto-select the best persistent-carry asset and rotate (paper)"
 	@echo "make live-monitor       live book status + audit trail"
 	@echo "make live-web           web dashboard -> http://localhost:8787"
 	@echo "make log                append one row to data/timeseries.csv"
@@ -95,6 +96,9 @@ log:
 
 live-paper:
 	$(PY) -m btcvol.live.engine
+
+live-auto:
+	$(PY) -m btcvol.live.auto
 
 live-monitor:
 	$(PY) -m btcvol.live.monitor

@@ -37,6 +37,7 @@ btcvol-log        = "btcvol.logger:main"
 btcvol-live       = "btcvol.live.engine:main"
 btcvol-live-monitor = "btcvol.live.monitor:main"
 btcvol-live-web   = "btcvol.live.web:main"
+btcvol-live-auto  = "btcvol.live.auto:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

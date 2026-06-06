@@ -55,12 +55,26 @@ the engine is actually deploying vs the best market (e.g. "deploys BTC at −5% 
 persistent carry is XMR +32% — NOT traded, auto-rotate OFF"). The engine does **not**
 auto-rotate yet; it deploys a fixed asset you choose:
 
-The engine deploys whatever `BTCVOL_SYMBOL` you set (own paper book per asset; all
-risk limits are USD-based so they work for any price level):
+Two ways to deploy:
 
+**Fixed asset** — you choose, engine holds it (own book per asset; USD-based limits):
 ```bash
 BTCVOL_SYMBOL=ETH make live-paper      # deploy the carry on ETH instead of BTC
 ```
+
+**Auto-select (rotating carry)** — the engine picks the best asset from the scan itself:
+```bash
+make live-auto                          # paper; own book data/live_auto.db
+BTCVOL_DB=live_auto.db make live-web    # view the auto book in the dashboard
+```
+The auto allocator (`btcvol.live.auto` → `selector.py`) ranks markets by **persistent**
+(14d-avg) funding, requires a **liquidity floor** and a **spot-able universe**
+(`BTCVOL_AUTO_SPOT_UNIVERSE`, default BTC/ETH/SOL/HYPE — `=ANY` to allow alts you can
+source spot for), and applies **hysteresis** (`BTCVOL_AUTO_SWITCH_MARGIN`, default 5%):
+it only rotates off the held asset when a candidate beats it by the margin, or the held
+asset stops qualifying — so it doesn't churn on hourly funding noise. Every rotation and
+order is risk-gated and audited. Example: it deploys **HYPE** (~+14% persistent, has HL
+spot) and reports that XMR (~+32%) is hotter but excluded for lack of co-located spot.
 
 The funding-timed allocator stays flat (cash) on any asset whose funding is negative,
 so pointing it at a negative-funding asset correctly does nothing. Notes: you need a

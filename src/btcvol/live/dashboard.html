@@ -122,11 +122,17 @@ async function tick(){
   // carry opportunities (all perps, persistent funding) + deployed-vs-best gap
   const pct=x=>(x>=0?'+':'')+(x*100).toFixed(1)+'%';
   if(s.opportunities&&s.opportunities.length){
-    const best=s.opportunities[0], dep=s.symbol||'BTC';
-    let gap = best.coin!==dep
-      ? `engine deploys <b>${dep}</b> (FIXED, auto-rotate OFF) at ${pct(s.deployed.funding_apr)} now · best persistent: <b class="pos">${best.coin}</b> ${pct(best.avg_apr)} — not traded`
-      : `engine deploys <b>${dep}</b> — currently the top persistent carry`;
-    $('trading').innerHTML='TRADING: '+gap;
+    const best=s.opportunities[0], dep=s.symbol||'BTC', auto=s.deployed&&s.deployed.auto_rotate;
+    let gap;
+    if(auto){
+      gap = `AUTO-ROTATING — holding <b class="pos">${dep}</b> at ${pct(s.deployed.funding_apr)} (best spot-able persistent carry)`
+        + (best.coin!==dep?` · ${best.coin} ${pct(best.avg_apr)} hotter but excluded (no co-located spot)`:'');
+    } else {
+      gap = best.coin!==dep
+        ? `engine deploys <b>${dep}</b> (FIXED) at ${pct(s.deployed.funding_apr)} · best persistent <b class="pos">${best.coin}</b> ${pct(best.avg_apr)} — not traded`
+        : `engine deploys <b>${dep}</b> — currently the top persistent carry`;
+    }
+    $('trading').innerHTML=gap;
     let rows=`<tr><td class="mut">coin</td><td class="mut">14d-avg</td><td class="mut">now</td><td class="mut">%hrs+</td><td class="mut">OI</td></tr>`;
     for(const o of s.opportunities){
       const dpl=o.coin===dep?' style="background:#16203a"':'';

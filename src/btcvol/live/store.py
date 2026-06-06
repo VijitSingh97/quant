@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS pnl (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ts REAL NOT NULL, equity_usd REAL, net_delta_btc REAL, note TEXT
 );
+CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT);
 """
 
 
@@ -89,6 +90,16 @@ class Store:
     def pnl_history(self, n=300):
         cur = self.db.execute("SELECT ts, equity_usd, net_delta_btc FROM pnl ORDER BY id DESC LIMIT ?", (n,))
         return list(reversed([dict(r) for r in cur.fetchall()]))
+
+    # --- key-value meta (e.g. currently held asset for the auto allocator) ---
+    def set_meta(self, k, v):
+        self.db.execute("INSERT INTO meta(k, v) VALUES (?,?) ON CONFLICT(k) DO UPDATE SET v=?",
+                        (k, str(v), str(v)))
+        self.db.commit()
+
+    def get_meta(self, k, default=None):
+        r = self.db.execute("SELECT v FROM meta WHERE k=?", (k,)).fetchone()
+        return r["v"] if r else default
 
     def close(self):
         self.db.close()
