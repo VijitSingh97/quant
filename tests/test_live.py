@@ -3,6 +3,7 @@ from btcvol.live import risk, config
 from btcvol.live.store import Store
 from btcvol.live.engine import plan_orders
 from btcvol.live.exchanges.base import Order
+from btcvol.live.status import build_status, paper_book
 
 
 # --- allocator ---
@@ -73,4 +74,27 @@ def test_store_roundtrip(tmp_path):
     assert s.positions()["spot"]["qty"] == 0.01
     assert s.recent_events(5)[0]["kind"] == "hello"
     assert s.latest_pnl()["equity_usd"] == 6000
+    s.close()
+
+
+# --- status assembler (offline, injected market) ---
+def test_paper_book_net_delta(tmp_path):
+    s = Store(tmp_path / "b.db")
+    s.set_position("spot", 0.085, 60000)
+    s.set_position("perp", -0.085, 60000)
+    s.set_position("funding_usd", 1.5, 0)
+    b = paper_book(s)
+    assert abs(b["net_delta"]) < 1e-9 and b["funding_usd"] == 1.5
+    s.close()
+
+
+def test_build_status_offline(tmp_path):
+    s = Store(tmp_path / "b.db")
+    s.set_position("spot", 0.0, 0)
+    s.set_position("perp", 0.0, 0)
+    s.snapshot_pnl(6000, 0.0, "t")
+    market = {"mark": 60000, "funding_apr": 0.06, "funding_rate_1h": 6.8e-6, "dvol": 0.5, "ts": 0}
+    st = build_status(s, market=market, include_live=False)   # no network
+    assert st["carry_on"] is True and st["target"]["spot"] > 0
+    assert st["live"] is None and "pnl_history" in st and "audit" in st
     s.close()

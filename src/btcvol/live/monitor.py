@@ -1,36 +1,49 @@
-"""Live monitor — read-only status from the audit store: mode, positions, net delta,
-equity / funding earned, kill-switch state, and the recent audit trail.
+"""Live monitor — CLI status from the audit store + market + (read-only) live account.
 
-Run:  python3 -m btcvol.live.monitor
+Paper book always; if BTCVOL_HL_ADDRESS is set, also shows your real Hyperliquid
+account (positions/equity) read-only — Phase 1. Run:  python3 -m btcvol.live.monitor
 """
 
 import time
 
-from . import config, risk
+from . import config
+from .status import build_status
 from .store import Store
 
 
 def main():
     store = Store(config.DB_PATH)
-    pos = store.positions()
-    pnl = store.latest_pnl()
+    s = build_status(store)
     bar = "=" * 64
-    print(f"\n{bar}\nLIVE MONITOR ({config.MODE.upper()} / {config.VENUE})\n{bar}")
-    print(f"  kill switch: {'ACTIVE — halted' if risk.kill_active() else 'off'}")
-    spot = pos.get("spot", {}).get("qty", 0.0)
-    perp = pos.get("perp", {}).get("qty", 0.0)
-    print(f"  positions    spot {spot:+.4f} BTC   perp {perp:+.4f} BTC   net delta {spot + perp:+.4f} BTC")
-    if "cash_usd" in pos:
-        print(f"  paper book   cash ${pos['cash_usd']['qty']:,.2f}   funding earned "
-              f"${pos.get('funding_usd', {}).get('qty', 0.0):,.4f}")
-    if pnl:
-        age = (time.time() - pnl["ts"]) / 60
-        print(f"  equity       ${pnl['equity_usd']:,.2f}   (last cycle {age:.0f} min ago)")
-    print(f"\n  {config.summary()}")
+    print(f"\n{bar}\nLIVE MONITOR ({s['mode'].upper()} / {s['venue']})\n{bar}")
+    print(f"  kill switch: {'ACTIVE — halted' if s['kill'] else 'off'}")
+    m = s["market"]
+    print(f"  market       BTC ${m['mark']:,.0f}   funding {m['funding_apr']*100:+.2f}% APR "
+          f"({'carry ON' if s['carry_on'] else 'carry OFF — flat'})"
+          + (f"   DVOL {m['dvol']*100:.0f}%" if m.get('dvol') else ""))
+
+    b = s["paper"]
+    print(f"\n  PAPER book   spot {b['spot']:+.4f}  perp {b['perp']:+.4f}  net delta {b['net_delta']:+.4f} BTC")
+    print(f"               cash ${b['cash']:,.2f}   funding earned ${b['funding_usd']:,.4f}   "
+          f"equity ${s['equity']:,.2f}")
+    t = s["target"]
+    print(f"  target       spot {t['spot']:+.4f}  perp {t['perp']:+.4f}  (deploy {config.DEPLOY_FRACTION:.0%})")
+
+    if s["live"]:
+        lv = s["live"]
+        if "error" in lv:
+            print(f"\n  LIVE account ({lv['address'][:10]}…): {lv['error']}")
+        else:
+            print(f"\n  LIVE account ({lv['address'][:10]}…)   spot {lv['spot']:+.4f}  perp {lv['perp']:+.4f}  "
+                  f"net delta {lv['net_delta']:+.4f} BTC   equity ${lv['equity']:,.2f}")
+    else:
+        print(f"\n  LIVE account: set BTCVOL_HL_ADDRESS=0x… for read-only live view (Phase 1)")
+
+    print(f"\n  {s['config']}")
     print(f"\n  recent audit trail:")
-    for e in reversed(store.recent_events(10)):
-        t = time.strftime("%H:%M:%S", time.gmtime(e["ts"]))
-        print(f"    {t}  {e['kind']:16} {e['data'] or ''}")
+    for e in reversed(s["audit"][:10]):
+        ts = time.strftime("%H:%M:%S", time.gmtime(e["ts"]))
+        print(f"    {ts}  {e['kind']:16} {(e['data'] or '')[:90]}")
     store.close()
 
 

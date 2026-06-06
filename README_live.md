@@ -14,12 +14,40 @@ and no API keys required** to start.
 
 ```bash
 make live-paper      # one reconcile cycle: read market -> target -> simulate fills -> audit
-make live-monitor    # book status (positions, net delta, equity, funding) + audit trail
+make live-monitor    # CLI status (positions, net delta, equity, funding) + audit trail
+make live-web        # web dashboard -> http://localhost:8787
 ```
 
-Run `live-paper` repeatedly (or on a schedule) — it converges to the delta-neutral
-carry (long spot / short perp), stays funding-timed (flat when funding < 0), and
-accrues simulated funding so you can watch the strategy earn.
+Run `live-paper` repeatedly (or scheduled) — it converges to the delta-neutral carry
+(long spot / short perp), stays funding-timed (flat when funding < 0), and accrues
+simulated funding so you can watch the strategy earn.
+
+## Web dashboard (`make live-web` → http://localhost:8787)
+
+A dependency-free single-page dashboard (stdlib `http.server`): mode/venue badge,
+**net-delta** indicator (green when neutral), equity, funding earned, live funding
+rate (carry ON/OFF), target-vs-actual book, an equity sparkline, the read-only live
+account (if configured), and the live **audit trail** — auto-refreshing every 5s.
+
+## Scheduled paper trading (Phase 2 — done)
+
+```bash
+./scripts/install_live_paper.sh     # launchd agent: hourly paper reconcile (no real money)
+./scripts/uninstall_live_paper.sh   # remove it
+```
+
+Runs the carry engine hourly like the data logger; accrues funding and builds the
+audit trail in `data/live.db`. Logs to `data/paper.{out,err}.log`.
+
+## Read-only live account (Phase 1 — done)
+
+Set your Hyperliquid wallet **address** (public, no secret) to see your real account
+read-only in the monitor and the web dashboard:
+
+```bash
+export BTCVOL_HL_ADDRESS=0xYourHyperliquidAddress
+make live-monitor      # now shows your real positions/equity alongside the paper book
+```
 
 ## Architecture (`src/btcvol/live/`)
 
@@ -54,13 +82,13 @@ append-only to `data/live.db`.
 
 ## The phased path to real money
 
-| Phase | Command | Needs | Your money |
-|---|---|---|---|
-| **0. Paper** (here) | `make live-paper` | nothing | none |
-| **1. Read-only live** | `BTCVOL_HL_ADDRESS=0x… make live-monitor` | HL wallet *address* (no secret) | none |
-| **2. Paper, scheduled** | launchd/cron `live-paper` hourly | nothing | none |
-| **3. Live, tiny** | `BTCVOL_MODE=live` + agent key | HL **agent wallet** (cannot withdraw) | a fraction of 0.1 BTC |
-| **4. Scaled** | same, caps raised | — | scales as it proves out |
+| Phase | Command | Needs | Your money | Status |
+|---|---|---|---|---|
+| **0. Paper** | `make live-paper` / `live-web` | nothing | none | ✅ done |
+| **1. Read-only live** | `BTCVOL_HL_ADDRESS=0x… make live-monitor` | HL wallet *address* (no secret) | none | ✅ done |
+| **2. Paper, scheduled** | `./scripts/install_live_paper.sh` | nothing | none | ✅ done |
+| **3. Live, tiny** | `BTCVOL_MODE=live` + agent key | HL **agent wallet** (cannot withdraw) | a fraction of 0.1 BTC | ⏳ needs your key |
+| **4. Scaled** | same, caps raised | — | scales as it proves out | — |
 
 **Funding:** you deposit USDC/BTC into your own Hyperliquid account; the system
 trades within it and has no withdrawal rights. Live order signing (Phase 3) is

@@ -86,5 +86,9 @@ class Store:
         r = self.db.execute("SELECT * FROM pnl ORDER BY id DESC LIMIT 1").fetchone()
         return dict(r) if r else None
 
+    def pnl_history(self, n=300):
+        cur = self.db.execute("SELECT ts, equity_usd, net_delta_btc FROM pnl ORDER BY id DESC LIMIT ?", (n,))
+        return list(reversed([dict(r) for r in cur.fetchall()]))
+
     def close(self):
         self.db.close()

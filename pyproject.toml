@@ -35,9 +35,13 @@ btcvol-backfill   = "btcvol.backfill:main"
 btcvol-log        = "btcvol.logger:main"
 btcvol-live       = "btcvol.live.engine:main"
 btcvol-live-monitor = "btcvol.live.monitor:main"
+btcvol-live-web   = "btcvol.live.web:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"btcvol.live" = ["*.html"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

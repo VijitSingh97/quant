@@ -1,0 +1,77 @@
+"""Web dashboard — stdlib http.server, no dependencies.
+
+Serves a single-page UI (dashboard.html) + a /api/status JSON endpoint backed by the
+shared status assembler. Market/live data is cached ~30s so the 5s UI refresh doesn't
+hammer the exchanges; store reads are fresh each call.
+
+Run:  python3 -m btcvol.live.web   ->  http://localhost:8787
+"""
+
+import http.server
+import json
+import os
+import socketserver
+import time
+from pathlib import Path
+
+from . import config
+from .status import build_status, market_snapshot, live_account
+from .store import Store
+
+HTML = (Path(__file__).parent / "dashboard.html").read_bytes()
+_cache = {"market": None, "live": None, "ts": 0.0}
+
+
+def _refresh(ttl=30):
+    if time.time() - _cache["ts"] > ttl:
+        try:
+            _cache["market"] = market_snapshot()
+            if config.HL_ADDRESS:
+                from .exchanges.hyperliquid import HyperliquidClient
+                _cache["live"] = live_account(HyperliquidClient())
+            _cache["ts"] = time.time()
+        except Exception:       # noqa: BLE001 — keep serving stale on a transient error
+            pass
+    return _cache
+
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    def _send(self, code, body, ctype):
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self):
+        if self.path in ("/", "/index.html"):
+            self._send(200, HTML, "text/html; charset=utf-8")
+        elif self.path.startswith("/api/status"):
+            c = _refresh()
+            store = Store(config.DB_PATH)
+            try:
+                s = build_status(store, market=c["market"] or market_snapshot(), include_live=False)
+            finally:
+                store.close()
+            s["live"] = c["live"]
+            self._send(200, json.dumps(s, default=str).encode(), "application/json")
+        else:
+            self._send(404, b"not found", "text/plain")
+
+    def log_message(self, *a):
+        pass
+
+
+def main():
+    port = int(os.environ.get("BTCVOL_WEB_PORT", "8787"))
+    print(f"btcvol.live dashboard -> http://localhost:{port}   (Ctrl-C to stop)")
+    socketserver.TCPServer.allow_reuse_address = True
+    with socketserver.TCPServer(("127.0.0.1", port), Handler) as httpd:
+        try:
+            httpd.serve_forever()
+        except KeyboardInterrupt:
+            print("\nstopped.")
+
+
+if __name__ == "__main__":
+    main()
