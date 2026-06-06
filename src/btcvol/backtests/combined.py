@@ -27,14 +27,22 @@ def _date_ms(d):
     return calendar.timegm(time.strptime(d, "%Y-%m-%d")) * 1000
 
 
-def carry_per_block(rolls, funding, leverage):
-    """Levered carry return for each roll's 30d block (sum of hourly funding within it)."""
+def carry_per_block(rolls, funding, leverage, timed=False, fc=24):
+    """Levered carry return for each roll's 30d block (sum of hourly funding within it).
+    If timed, only accrue funding when the trailing-`fc`h average was positive (Inan 2024
+    funding persistence) — i.e. exit to cash before predicted-negative stretches."""
+    held = None
+    if timed:
+        rates = [f for _, f in funding]
+        held = {funding[i][0]: (i < fc or statistics.mean(rates[i - fc:i]) > 0)
+                for i in range(len(funding))}
     block_ms = HOLD * 86400 * 1000
     out = []
     for r in rolls:
         start = _date_ms(r["date"])
         end = start + block_ms
-        out.append(leverage * sum(f for ts, f in funding if start <= ts < end))
+        out.append(leverage * sum(f for ts, f in funding
+                                  if start <= ts < end and (held is None or held[ts])))
     return out
 
 
@@ -57,20 +65,21 @@ def _row(name, s):
     return f"  {name:14} {fmt_pct(s['total']):>9} {fmt_pct(s['cagr']):>9} {sh:>8} {fmt_pct(s['mdd']):>9}"
 
 
-def run(leverage=3.0, risk=0.15, skew=True, vol_target=None, asset="BTC"):
+def run(leverage=3.0, risk=0.15, skew=True, vol_target=None, asset="BTC", vov=True, timed=True):
     from ..core.assets import get_asset
     a = get_asset(asset)
     if not a["has_dvol"]:
         print(f"{asset.upper()} has no DVOL index — try BTC or ETH.")
         return
     sim = simulate(skew=skew, asset=asset)
-    rolls = sim["filtered"]                       # the viable variant (DVOL>RV filtered)
+    # condor leg: VOV-gated (skip unstable-vol regimes) is the strongest variant; else DVOL>RV
+    rolls = sim["vov_filtered"] if vov else sim["filtered"]
     if not rolls:
         print("No rolls.")
         return
     funding = deribit_funding_history(a["deribit_perp"], days=1020)   # cover the full condor window
 
-    carry = carry_per_block(rolls, funding, leverage)
+    carry = carry_per_block(rolls, funding, leverage, timed=timed)
     # condor risk per block: fixed, or vol-targeted (size down when trailing RV is high)
     def block_risk(r):
         if vol_target and r["rv_trail"]:
@@ -84,7 +93,9 @@ def run(leverage=3.0, risk=0.15, skew=True, vol_target=None, asset="BTC"):
 
     bar = "=" * 78
     vt = f"  vol-targeted to {fmt_vol(vol_target)}" if vol_target else ""
-    print(f"\n{bar}\nCOMBINED-BOOK BACKTEST  (carry {leverage:.0f}x  +  filtered condor {risk:.0%} risk/roll{vt})\n{bar}")
+    cond = "VOV-gated condor" if vov else "DVOL>RV condor"
+    cary = "timed carry" if timed else "always-on carry"
+    print(f"\n{bar}\nCOMBINED-BOOK BACKTEST  ({cary} {leverage:.0f}x  +  {cond} {risk:.0%} risk/roll{vt})\n{bar}")
     print(f"window {sim['dates'][0]} -> {sim['dates'][-1]}   {len(rolls)} blocks   condor: {sim['skew_note']}")
     print(f"\n  {'book':14} {'total':>9} {'CAGR':>9} {'Sharpe':>8} {'maxDD':>9}")
     print(_row("carry-only", sc))
@@ -109,18 +120,22 @@ def run(leverage=3.0, risk=0.15, skew=True, vol_target=None, asset="BTC"):
         print(f"• Legs are {kind} (r={corr:+.2f}) — both prefer calm, so the hedge between them is partial.")
     print(f"• ~{len(rolls)} blocks (one year) — directional, not conclusive (see issue #4). Leverage/risk are")
     print(f"  levers: carry scales linearly with leverage (and so does liquidation risk); condor risk is capped.")
+    print(f"• Config: {cond} (skip unstable-vol regimes, Du 2025) + {cary} (Inan 2024 funding persistence).")
     print("\n(Educational tooling, not investment advice. Carry tail = exchange/liquidation, not in this curve.)")
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Combined carry + filtered-condor book backtest")
+    ap = argparse.ArgumentParser(description="Combined carry + condor book backtest (VOV-gated + timed by default)")
     ap.add_argument("--leverage", type=float, default=3.0, help="carry leg leverage (default 3)")
     ap.add_argument("--risk", type=float, default=0.15, help="condor capital fraction risked per roll (default 0.15)")
     ap.add_argument("--flat", action="store_true", help="price the condor flat-vol (default: real skew)")
     ap.add_argument("--vol-target", type=float, default=None, help="vol-target the condor risk to this annualized vol (e.g. 0.15)")
+    ap.add_argument("--no-vov", action="store_true", help="plain DVOL>RV condor instead of the VOV gate")
+    ap.add_argument("--no-timed", action="store_true", help="always-on carry instead of funding-timed")
     ap.add_argument("--asset", default="BTC", help="asset with a DVOL index (BTC or ETH)")
     args = ap.parse_args()
-    run(leverage=args.leverage, risk=args.risk, skew=not args.flat, vol_target=args.vol_target, asset=args.asset)
+    run(leverage=args.leverage, risk=args.risk, skew=not args.flat, vol_target=args.vol_target,
+        asset=args.asset, vov=not args.no_vov, timed=not args.no_timed)
 
 
 if __name__ == "__main__":

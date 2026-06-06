@@ -24,6 +24,17 @@ def test_leg_stats_drawdown_negative_on_loss():
     assert s["mdd"] < 0
 
 
+def test_carry_per_block_timed_avoids_negative_stretches():
+    h = 3600 * 1000
+    funding = ([(i * h, 0.001) for i in range(24)]            # 24 positive hours
+               + [((24 + i) * h, -0.001) for i in range(48)])  # then a negative stretch
+    rolls = [{"date": "1970-01-01"}]
+    untimed = carry_per_block(rolls, funding, 1.0, timed=False)[0]
+    timed = carry_per_block(rolls, funding, 1.0, timed=True)[0]
+    assert untimed < 0                 # raw stream is net negative
+    assert timed > untimed             # timing skips the predicted-negative tail
+
+
 def test_carry_per_block_buckets_and_levers():
     # one roll starting at epoch; funding inside the 30d block counts, outside doesn't
     rolls = [{"date": "1970-01-01"}]

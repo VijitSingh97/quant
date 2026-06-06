@@ -52,7 +52,7 @@ A `Makefile` wraps the common commands: `make dashboard`, `make monitor`,
 | `btcvol.backtests.carry` / `btcvol-carry [years]` | Backtests long-spot/short-perp funding carry on multi-year Deribit hourly funding. APR, Sharpe, drawdown, % negative, yearly breakdown. |
 | `btcvol.backtests.vrp` / `btcvol-vrp` | Backtests selling 30d vol *naked* (DVOL vs forward realized). Win rate, avg premium, worst tail roll, Sharpe. |
 | `btcvol.backtests.robustness` / `btcvol-robust` | **Anti-overfit checks**: parameter sweep (Δ × wing), walk-forward (in/out-of-sample), and fee-drag — reuses one market pull. Verdict flags whether the edge is broad or a knife-edge. Flags: `--risk`, `--fee-bps`, `--flat`. |
-| `btcvol.backtests.combined` / `btcvol-combined` | **Combines the two engines into one book**: funding carry (levered) + the filtered, skew-priced condor, over a common window. Reports each leg vs combined (total/CAGR/Sharpe/maxDD) and the leg correlation. Flags: `--leverage`, `--risk`, `--flat`. |
+| `btcvol.backtests.combined` / `btcvol-combined` | **Combines the two engines into one book**: funding carry (levered) + the skew-priced condor, over a common window. Defaults to the **strongest config** — VOV-gated condor + funding-timed carry. Reports each leg vs combined (total/CAGR/Sharpe/maxDD) and the leg correlation. Flags: `--leverage`, `--risk`, `--vol-target`, `--no-vov`, `--no-timed`. |
 | `btcvol.backfill` / `btcvol-backfill` | **Backfills historical IV-surface skew** from Tardis.dev free monthly Deribit option-chain snapshots (back to 2020) → `data/skew_history.csv`. Gives real historical RR/BF *now* instead of waiting on the logger. `--asset`, `--start`. |
 | `btcvol.backtests.structures --histskew` | Condor backtest priced with **real per-roll historical skew** (from the Tardis backfill) vs the static fit — answers whether the static-skew approximation was biased. |
 | `btcvol.backtests.structures` / `btcvol-condor-bt` | Backtests the **monthly defined-risk condor rule**: rolls a delta-based iron condor (synthetic credit @ historical DVOL, real price path for the payoff), compares sell-every-month vs a DVOL>RV filter, and shows the capped tail vs the naked book. Flags: `--delta`, `--wing-pct`, `--risk`. |
@@ -230,6 +230,11 @@ Backtests run on the full free history (DVOL backfills ~3y on Deribit; we use al
 - **Vol-of-vol gate** (Du 2025, `--vov`): skipping rolls when vol-of-vol is above its
   expanding median (unstable-vol regimes) lifts the filtered condor to CAGR **+9.3%**,
   Sharpe **0.48**, maxDD **−20%** — a genuine improvement over the plain DVOL>RV filter.
+- **Strongest combined book** (now the `combined` default — VOV-gated condor + funding-timed
+  carry): **CAGR +23.3%, Sharpe 1.75, maxDD −11%** over 3y, vs the prior +21.0% / 1.53 — the
+  timed carry leg sidesteps negative-funding stretches (≈0 modelled drawdown) and the VOV gate
+  trims the condor's worst months. Legs stay negatively correlated (r≈−0.2), so the condor
+  remains a hedge. This is the configuration the findings point to.
 
 **Takeaway:** **carry is the workhorse; the condor is a marginal, parameter-sensitive
 overlay that earns its place as a vol-targeted *hedge*, not a return source.** Sell
