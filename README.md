@@ -74,6 +74,22 @@ make skew           # read the live vol surface / skew
 make condor-bt      # backtest the monthly condor rule (add --skew for real skew)
 ```
 
+### Multi-asset
+
+Every tool takes `--asset` (default `BTC`). `BTC`/`ETH` are fully supported (DVOL +
+options + perp funding); `SOL` has perps + options but no DVOL (so the vol backtests
+skip it); `PAXG` (tokenized gold) is a Deribit index/vol reference only.
+
+```bash
+PYTHONPATH=src python3 -m btcvol.dashboard --asset ETH
+PYTHONPATH=src python3 -m btcvol.skew --asset ETH
+PYTHONPATH=src python3 -m btcvol.backtests.combined --asset ETH --vol-target 0.18
+PYTHONPATH=src python3 -m btcvol.logger --asset ETH      # -> data/eth_timeseries.csv
+```
+
+The logger writes each asset to its own `data/<asset>_timeseries.csv` (BTC stays
+`timeseries.csv`); backtests that need a volatility index require BTC or ETH.
+
 ---
 
 ## Project layout
@@ -105,8 +121,9 @@ quant/
 │       ├── blackscholes.py   BS pricing, delta, strike-from-delta, prob/EV
 │       ├── surface.py        IV surface: smile metrics, interpolation, skew fit
 │       ├── sizing.py         vol-target + fractional-Kelly sizing
+│       ├── assets.py         per-asset venue symbols (BTC/ETH/SOL/PAXG)
 │       ├── format.py         fmt_pct / fmt_vol / sparkline
-│       ├── sources.py        all exchange data pulls (incl. option chain)
+│       ├── sources.py        all exchange data pulls (asset-parameterized)
 │       └── paths.py          project-root-anchored data dir
 ├── scripts/
 │   ├── run_logger.sh         what launchd actually executes
@@ -137,7 +154,7 @@ All public, no API keys. Chosen because they're reachable without geo-blocks:
 > Blocked from many regions: **Binance** (HTTP 451) and **Bybit** (HTTP 403) — not
 > used. Endpoints require a browser `User-Agent` (handled in `core/http.py`). OKX's
 > *public* funding history only serves ~3 months, so backtests use Deribit's
-> multi-year hourly funding instead.
+> multi-year hourly funding instead. Per-asset symbols live in `core/assets.py`.
 
 ---
 

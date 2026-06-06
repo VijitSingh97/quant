@@ -27,8 +27,12 @@ def _metrics(rolls, risk):
     return s["cagr"], s["sharpe"], s["mdd"], s["win_rate"]
 
 
-def run(risk=0.20, fee_bps=15.0, skew=True):
-    market = load_market(skew=skew)
+def run(risk=0.20, fee_bps=15.0, skew=True, asset="BTC"):
+    from ..core.assets import get_asset
+    if not get_asset(asset)["has_dvol"]:
+        print(f"{asset.upper()} has no DVOL index — try BTC or ETH.")
+        return
+    market = load_market(skew=skew, asset=asset)
     bar = "=" * 78
     print(f"\n{bar}\nROBUSTNESS / ANTI-OVERFIT — condor rule\n{bar}")
     print(f"window {market['dates'][0]} -> {market['dates'][-1]}   condor: {market['skew_note']}   "
@@ -105,8 +109,9 @@ def main():
     ap.add_argument("--risk", type=float, default=0.20, help="capital fraction risked per roll (default 0.20)")
     ap.add_argument("--fee-bps", type=float, default=15.0, help="round-trip fee in bps for the cost check (default 15)")
     ap.add_argument("--flat", action="store_true", help="flat-vol pricing (default: real skew)")
+    ap.add_argument("--asset", default="BTC", help="asset with a DVOL index (BTC or ETH)")
     args = ap.parse_args()
-    run(risk=args.risk, fee_bps=args.fee_bps, skew=not args.flat)
+    run(risk=args.risk, fee_bps=args.fee_bps, skew=not args.flat, asset=args.asset)
 
 
 if __name__ == "__main__":

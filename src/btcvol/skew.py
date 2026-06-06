@@ -8,7 +8,10 @@ expiry. Also fits a parametric skew shape that the condor backtest can reuse.
 Run:  python3 -m btcvol.skew
 """
 
+import argparse
+
 from .core import fmt_vol, safe
+from .core.assets import get_asset
 from .core.sources import deribit_option_chain
 from .core.surface import build_surface, fit_skew, skew_iv
 
@@ -44,14 +47,20 @@ def _smile_chart(rec, S, rows=9, cols=58):
 
 
 def main():
-    chain = safe("Deribit chain", deribit_option_chain)
-    if not chain:
+    ap = argparse.ArgumentParser(description="Read the live implied-vol surface / skew")
+    ap.add_argument("--asset", default="BTC", help="asset symbol (BTC, ETH, SOL, ...)")
+    name = ap.parse_args().asset.upper()
+    a = get_asset(name)
+
+    chain = safe("Deribit chain", lambda: deribit_option_chain(a["deribit_ccy"], a["deribit_index"]))
+    if not chain or not chain["options"]:
+        print(f"No option chain for {name}.")
         return
     surf = build_surface(chain)
     S = surf["S"]
     bar = "=" * 74
 
-    print(f"\n{bar}\nBTC IMPLIED-VOL SURFACE — Deribit   spot ${S:,.0f}\n{bar}")
+    print(f"\n{bar}\n{name} IMPLIED-VOL SURFACE — Deribit   spot ${S:,.2f}\n{bar}")
     print(f"{'expiry':10} {'DTE':>4} {'ATM':>7} {'25dP':>7} {'25dC':>7} {'RR25':>8} {'BF25':>7}  skew")
     for e in surf["expiries"][:9]:
         if e["rr25"] is None:

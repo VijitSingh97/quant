@@ -18,6 +18,7 @@ Run:  python3 -m btcvol.backtests.structures [--delta 0.20] [--wing-pct 0.08] [-
 """
 
 import argparse
+import math
 import statistics
 import time
 
@@ -33,6 +34,16 @@ LOOKBACK_DAYS = 1000          # DVOL backfills ~3y free; cap is 1000d (~33 rolls
 
 def _round(x, grid):
     return round(x / grid) * grid
+
+
+def _nice_grid(S):
+    """A sensible strike-rounding grid ~1.5% of spot (1000 for BTC, 25 for ETH, 1 for SOL)."""
+    target = S * 0.015
+    mag = 10 ** math.floor(math.log10(target))
+    for m in (1, 2, 2.5, 5, 10):
+        if m * mag >= target:
+            return m * mag
+    return 10 * mag
 
 
 def _condor(S, iv, T, delta, wing_pct, grid, iv_fn=None):
@@ -95,20 +106,22 @@ def _print_summary(s, risk):
     print(f"  equity curve     {sparkline(s['equity'])}")
 
 
-def load_market(skew=False):
+def load_market(skew=False, asset="BTC"):
     """Pull DVOL + price path once (and fit live skew if requested). Reused across a
     parameter sweep so we don't re-hit the API per combination."""
+    from ..core.assets import get_asset
+    a = get_asset(asset)
     iv_fn, skew_note = None, "flat vol"
     if skew:
         from ..core.surface import build_surface, fit_skew, skew_iv
         from ..core.sources import deribit_option_chain
-        fit = fit_skew(build_surface(deribit_option_chain()))
+        fit = fit_skew(build_surface(deribit_option_chain(a["deribit_ccy"], a["deribit_index"])))
         coeffs = fit["coeffs"]
         iv_fn = lambda atm, T, K, S: skew_iv(coeffs, atm, T, K, S)
         skew_note = f"skew from live {fit['ref_expiry']} surface (a={tuple(round(c,3) for c in coeffs)})"
 
-    dvol = deribit_dvol(days=LOOKBACK_DAYS, resolution="1D")
-    chart = deribit_chart("BTC-PERPETUAL", days=LOOKBACK_DAYS, resolution="1D")
+    dvol = deribit_dvol(days=LOOKBACK_DAYS, resolution="1D", currency=a["deribit_ccy"])
+    chart = deribit_chart(a["deribit_perp"], days=LOOKBACK_DAYS, resolution="1D")
     iv_by_date = {time.strftime("%Y-%m-%d", time.gmtime(ts / 1000)): iv for ts, iv in dvol}
     px_by_date = {time.strftime("%Y-%m-%d", time.gmtime(t / 1000)): c
                   for t, c in zip(chart["ticks"], chart["close"])}
@@ -118,11 +131,13 @@ def load_market(skew=False):
             "iv_fn": iv_fn, "skew": skew, "skew_note": skew_note}
 
 
-def simulate_from(market, delta=0.20, wing_pct=0.08, grid=1000.0, fee_bps=0.0):
+def simulate_from(market, delta=0.20, wing_pct=0.08, grid=None, fee_bps=0.0):
     """Run the condor rolls against pre-loaded market data. fee_bps is a round-trip
-    cost (bps of notional) deducted from each roll's credit."""
+    cost (bps of notional) deducted from each roll's credit. grid auto-scales to spot."""
     S, IV, dates, T, iv_fn, skew = (market["S"], market["IV"], market["dates"],
                                     market["T"], market["iv_fn"], market["skew"])
+    if grid is None:
+        grid = _nice_grid(S[len(S) // 2])
     detail, always, filtered = [], [], []
     i = 0
     while i + HOLD < len(S):
@@ -147,13 +162,17 @@ def simulate_from(market, delta=0.20, wing_pct=0.08, grid=1000.0, fee_bps=0.0):
             "dates": dates, "skew": skew, "skew_note": market["skew_note"]}
 
 
-def simulate(delta=0.20, wing_pct=0.08, grid=1000.0, skew=False):
+def simulate(delta=0.20, wing_pct=0.08, grid=1000.0, skew=False, asset="BTC"):
     """Convenience: load market data then run one parameter set."""
-    return simulate_from(load_market(skew), delta, wing_pct, grid)
+    return simulate_from(load_market(skew, asset), delta, wing_pct, grid)
 
 
-def run(delta=0.20, wing_pct=0.08, risk=0.20, grid=1000.0, skew=False):
-    sim = simulate(delta, wing_pct, grid, skew)
+def run(delta=0.20, wing_pct=0.08, risk=0.20, grid=None, skew=False, asset="BTC"):
+    from ..core.assets import get_asset
+    if not get_asset(asset)["has_dvol"]:
+        print(f"{asset.upper()} has no DVOL index — vol backtests need one (try BTC or ETH).")
+        return
+    sim = simulate(delta, wing_pct, grid, skew, asset)
     detail, always, filtered = sim["detail"], sim["always"], sim["filtered"]
     dates, skew_note = sim["dates"], sim["skew_note"]
     bar = "=" * 78
@@ -209,8 +228,9 @@ def main():
     ap.add_argument("--wing-pct", type=float, default=0.08, help="wing width as fraction of spot (default 0.08)")
     ap.add_argument("--risk", type=float, default=0.20, help="capital fraction risked per roll for the compounding curve (default 0.20)")
     ap.add_argument("--skew", action="store_true", help="price legs with today's fitted skew shape (vs flat vol)")
+    ap.add_argument("--asset", default="BTC", help="asset with a DVOL index (BTC or ETH)")
     args = ap.parse_args()
-    run(delta=args.delta, wing_pct=args.wing_pct, risk=args.risk, skew=args.skew)
+    run(delta=args.delta, wing_pct=args.wing_pct, risk=args.risk, skew=args.skew, asset=args.asset)
 
 
 if __name__ == "__main__":

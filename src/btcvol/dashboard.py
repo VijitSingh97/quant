@@ -5,11 +5,13 @@ perp funding/OI (OKX, Hyperliquid), prints a dashboard, and saves a JSON
 snapshot to data/. Run:  python3 -m btcvol.dashboard
 """
 
+import argparse
 import json
 import statistics
 import time
 
 from .core import fmt_pct, fmt_vol, safe, DATA_DIR
+from .core.assets import get_asset
 from .core.sources import (coinbase_spot_and_candles, okx_perp,
                            hyperliquid_perp, deribit_vol_and_basis)
 
@@ -79,19 +81,24 @@ def _strip(cb):
 
 
 def main():
-    print("Pulling BTC market snapshot ...\n")
-    cb = safe("Coinbase", coinbase_spot_and_candles)
-    okx = safe("OKX", okx_perp)
-    hl = safe("Hyperliquid", hyperliquid_perp)
-    der = safe("Deribit", deribit_vol_and_basis)
+    ap = argparse.ArgumentParser(description="One-shot BTC/ETH/... market snapshot")
+    ap.add_argument("--asset", default="BTC", help="asset symbol (BTC, ETH, SOL, ...)")
+    name = ap.parse_args().asset.upper()
+    a = get_asset(name)
+
+    print(f"Pulling {name} market snapshot ...\n")
+    cb = safe("Coinbase", lambda: coinbase_spot_and_candles(a["coinbase"])) if a["coinbase"] else None
+    okx = safe("OKX", lambda: okx_perp(a["okx"])) if a["okx"] else None
+    hl = safe("Hyperliquid", lambda: hyperliquid_perp(a["hl"])) if a["hl"] else None
+    der = safe("Deribit", lambda: deribit_vol_and_basis(a["deribit_ccy"], a["deribit_index"]))
 
     ts = int(time.time())
     bar = "=" * 70
 
-    print(f"\n{bar}\nBTC VOLATILITY / CARRY DASHBOARD   {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}\n{bar}")
+    print(f"\n{bar}\n{name} VOLATILITY / CARRY DASHBOARD   {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}\n{bar}")
 
     if cb:
-        print(f"\nSPOT (Coinbase)            ${cb['spot']:,.0f}")
+        print(f"\nSPOT (Coinbase)            ${cb['spot']:,.2f}")
         print(f"  7d / 30d return          {fmt_pct(cb['ret_7d'])}  /  {fmt_pct(cb['ret_30d'])}")
         print(f"  vs MA7 / MA30            ${cb['ma_7d']:,.0f}  /  ${cb['ma_30d']:,.0f}")
         print("\nREALIZED VOL (annualized)")
@@ -121,8 +128,8 @@ def main():
         print("• " + ln)
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    snap = {"ts": ts, "coinbase": _strip(cb), "okx": okx, "hyperliquid": hl, "deribit": der}
-    path = DATA_DIR / f"snapshot_{ts}.json"
+    snap = {"ts": ts, "asset": name, "coinbase": _strip(cb), "okx": okx, "hyperliquid": hl, "deribit": der}
+    path = DATA_DIR / f"snapshot_{name}_{ts}.json"
     with open(path, "w") as f:
         json.dump(snap, f, indent=2, default=str)
     print(f"\nSnapshot saved -> {path}")

@@ -22,17 +22,19 @@ def d1_d2(S, K, T, sigma):
 
 
 def bs_price(S, K, T, sigma, kind):
-    """European option price. kind is 'C' or 'P'."""
-    if T <= 0 or sigma <= 0:
+    """European option price. kind is 'C' or 'P'. Degenerate inputs -> intrinsic."""
+    v = (sigma * math.sqrt(T)) if (sigma > 0 and T > 0) else 0.0
+    if v <= 0 or S <= 0 or K <= 0:                # no div-by-zero / log-domain ever
         return max(0.0, S - K) if kind == "C" else max(0.0, K - S)
-    d1, d2 = d1_d2(S, K, T, sigma)
+    d1 = (math.log(S / K) + 0.5 * v * v) / v
+    d2 = d1 - v
     if kind == "C":
         return S * norm_cdf(d1) - K * norm_cdf(d2)
     return K * norm_cdf(-d2) - S * norm_cdf(-d1)
 
 
 def bs_delta(S, K, T, sigma, kind):
-    if T <= 0 or sigma <= 0:
+    if T <= 0 or sigma <= 0 or S <= 0 or K <= 0:
         if kind == "C":
             return 1.0 if S > K else 0.0
         return -1.0 if S < K else 0.0

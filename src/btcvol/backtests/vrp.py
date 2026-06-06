@@ -33,9 +33,14 @@ def fwd_realized_vol(closes, i, horizon=HOLD):
     return statistics.stdev(log_returns(seg)) * math.sqrt(DAYS)
 
 
-def run():
-    dvol = deribit_dvol(days=1000, resolution="1D")          # ~3y of DVOL (free backfill)
-    chart = deribit_chart("BTC-PERPETUAL", days=1000, resolution="1D")
+def run(asset="BTC"):
+    from ..core.assets import get_asset
+    a = get_asset(asset)
+    if not a["has_dvol"]:
+        print(f"{asset.upper()} has no DVOL index — try BTC or ETH.")
+        return
+    dvol = deribit_dvol(days=1000, resolution="1D", currency=a["deribit_ccy"])   # ~3y free backfill
+    chart = deribit_chart(a["deribit_perp"], days=1000, resolution="1D")
     ticks, closes = chart["ticks"], chart["close"]
 
     iv_by_date = {time.strftime("%Y-%m-%d", time.gmtime(ts / 1000)): iv for ts, iv in dvol}
@@ -114,7 +119,10 @@ def run():
 
 
 def main():
-    run()
+    import argparse
+    ap = argparse.ArgumentParser(description="Vol-risk-premium backtest")
+    ap.add_argument("--asset", default="BTC", help="asset with a DVOL index (BTC or ETH)")
+    run(asset=ap.parse_args().asset)
 
 
 if __name__ == "__main__":

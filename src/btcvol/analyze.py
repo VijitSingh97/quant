@@ -8,6 +8,7 @@ gracefully: with few rows it still prints what it can and says so.
 Run:  python3 -m btcvol.analyze
 """
 
+import argparse
 import csv
 import statistics
 
@@ -53,10 +54,14 @@ def pct_true(vals, pred):
 
 
 def main():
-    if not CSV_PATH.exists():
-        print(f"No captured data yet at {CSV_PATH}. Run `make log` or install the launchd agent.")
+    ap = argparse.ArgumentParser(description="Analyze our captured timeseries.csv")
+    ap.add_argument("--asset", default="BTC", help="asset (BTC -> timeseries.csv; else <asset>_timeseries.csv)")
+    name = ap.parse_args().asset.upper()
+    path = CSV_PATH if name == "BTC" else DATA_DIR / f"{name.lower()}_timeseries.csv"
+    if not path.exists():
+        print(f"No captured data yet at {path}. Run `make log` (or `--asset {name}`) / install the launchd agent.")
         return
-    rows = load_series(CSV_PATH)
+    rows = load_series(path)
     n = len(rows)
     bar = "=" * 70
     print(f"\n{bar}\nCAPTURED-DATA ANALYSIS — {CSV_PATH.name}\n{bar}")

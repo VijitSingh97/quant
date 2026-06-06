@@ -126,7 +126,7 @@ def fit_skew(surface, target_dte=30, max_x=2.5):
 def skew_iv(coeffs, atm, T, K, S):
     """Apply a fitted skew shape to an ATM vol -> per-strike IV (floored at 5%)."""
     a0, a1, a2 = coeffs
-    if atm <= 0 or T <= 0:
+    if atm <= 0 or T <= 0 or K <= 0 or S <= 0:
         return atm
     x = math.log(K / S) / (atm * math.sqrt(T))
     return max(0.05, atm * (a0 + a1 * x + a2 * x * x))

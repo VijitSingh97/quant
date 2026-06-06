@@ -20,6 +20,7 @@ import argparse
 import json
 
 from .core import fmt_pct, safe, bs_delta
+from .core.assets import get_asset
 from .core.sources import deribit_option_chain
 
 
@@ -71,12 +72,14 @@ def demo_positions(chain):
 
 def main():
     ap = argparse.ArgumentParser(description="Delta-neutral book monitor")
+    ap.add_argument("--asset", default="BTC", help="asset symbol for the option chain (BTC, ETH, ...)")
     ap.add_argument("--positions", help="path to positions JSON (default: a demo book)")
     ap.add_argument("--threshold", type=float, default=0.05, help="net-delta alert threshold in BTC (default 0.05)")
     ap.add_argument("--strict", action="store_true", help="exit nonzero when net delta exceeds the threshold")
     args = ap.parse_args()
 
-    chain = safe("Deribit chain", deribit_option_chain)
+    a = get_asset(args.asset)
+    chain = safe("Deribit chain", lambda: deribit_option_chain(a["deribit_ccy"], a["deribit_index"]))
     if not chain:
         return
     if args.positions:

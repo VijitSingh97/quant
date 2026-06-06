@@ -57,13 +57,18 @@ def _row(name, s):
     return f"  {name:14} {fmt_pct(s['total']):>9} {fmt_pct(s['cagr']):>9} {sh:>8} {fmt_pct(s['mdd']):>9}"
 
 
-def run(leverage=3.0, risk=0.15, skew=True, vol_target=None):
-    sim = simulate(skew=skew)
+def run(leverage=3.0, risk=0.15, skew=True, vol_target=None, asset="BTC"):
+    from ..core.assets import get_asset
+    a = get_asset(asset)
+    if not a["has_dvol"]:
+        print(f"{asset.upper()} has no DVOL index — try BTC or ETH.")
+        return
+    sim = simulate(skew=skew, asset=asset)
     rolls = sim["filtered"]                       # the viable variant (DVOL>RV filtered)
     if not rolls:
         print("No rolls.")
         return
-    funding = deribit_funding_history("BTC-PERPETUAL", days=1020)   # cover the full condor window
+    funding = deribit_funding_history(a["deribit_perp"], days=1020)   # cover the full condor window
 
     carry = carry_per_block(rolls, funding, leverage)
     # condor risk per block: fixed, or vol-targeted (size down when trailing RV is high)
@@ -113,8 +118,9 @@ def main():
     ap.add_argument("--risk", type=float, default=0.15, help="condor capital fraction risked per roll (default 0.15)")
     ap.add_argument("--flat", action="store_true", help="price the condor flat-vol (default: real skew)")
     ap.add_argument("--vol-target", type=float, default=None, help="vol-target the condor risk to this annualized vol (e.g. 0.15)")
+    ap.add_argument("--asset", default="BTC", help="asset with a DVOL index (BTC or ETH)")
     args = ap.parse_args()
-    run(leverage=args.leverage, risk=args.risk, skew=not args.flat, vol_target=args.vol_target)
+    run(leverage=args.leverage, risk=args.risk, skew=not args.flat, vol_target=args.vol_target, asset=args.asset)
 
 
 if __name__ == "__main__":

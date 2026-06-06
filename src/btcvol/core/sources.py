@@ -72,17 +72,18 @@ def deribit_chart(instrument="BTC-PERPETUAL", days=400, resolution="1D"):
                     f"&end_timestamp={now}&resolution={resolution}")["result"]
 
 
-def deribit_dvol(days=400, resolution="1D"):
-    """Deribit DVOL (30d implied vol index) -> [(ts_ms, close_fraction)] oldest->newest."""
+def deribit_dvol(days=400, resolution="1D", currency="BTC"):
+    """Deribit DVOL (30d implied vol index) -> [(ts_ms, close_fraction)] oldest->newest.
+    Only BTC and ETH have a DVOL index."""
     now = int(time.time() * 1000)
     start = now - days * 24 * 3600 * 1000
     data = http_get(f"https://www.deribit.com/api/v2/public/get_volatility_index_data"
-                    f"?currency=BTC&start_timestamp={start}&end_timestamp={now}"
+                    f"?currency={currency}&start_timestamp={start}&end_timestamp={now}"
                     f"&resolution={resolution}")["result"]["data"]
     return [(row[0], row[4] / 100.0) for row in data]   # close, % -> fraction
 
 
-def deribit_option_chain():
+def deribit_option_chain(currency="BTC", index_name="btc_usd"):
     """Live BTC option chain -> {'index', 'options': [...]}.
 
     Strikes/expiries/types come from get_instruments (robust, no name parsing);
@@ -90,10 +91,10 @@ def deribit_option_chain():
     One call each — greeks/probabilities are computed locally from IV.
     """
     base = "https://www.deribit.com/api/v2/public"
-    instruments = http_get(f"{base}/get_instruments?currency=BTC&kind=option&expired=false")["result"]
-    summary = http_get(f"{base}/get_book_summary_by_currency?currency=BTC&kind=option")["result"]
+    instruments = http_get(f"{base}/get_instruments?currency={currency}&kind=option&expired=false")["result"]
+    summary = http_get(f"{base}/get_book_summary_by_currency?currency={currency}&kind=option")["result"]
     sm = {s["instrument_name"]: s for s in summary}
-    index = http_get(f"{base}/get_index_price?index_name=btc_usd")["result"]["index_price"]
+    index = http_get(f"{base}/get_index_price?index_name={index_name}")["result"]["index_price"]
     now = int(time.time() * 1000)
 
     opts = []
@@ -118,18 +119,19 @@ def deribit_option_chain():
 # --------------------------------------------------------------------------- #
 # Live snapshots (for dashboard / logger)
 # --------------------------------------------------------------------------- #
-def coinbase_spot_and_candles():
+def coinbase_spot_and_candles(product="BTC-USD"):
     """Spot + daily candles (RV/trend) + hourly candles (short-term RV)."""
-    spot = float(http_get("https://api.exchange.coinbase.com/products/BTC-USD/ticker")["price"])
+    base = "https://api.exchange.coinbase.com/products"
+    spot = float(http_get(f"{base}/{product}/ticker")["price"])
 
     # daily candles: [time, low, high, open, close, volume], newest first, max 300
-    daily = http_get("https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=86400")
+    daily = http_get(f"{base}/{product}/candles?granularity=86400")
     daily = sorted(daily, key=lambda c: c[0])          # oldest -> newest
     closes = [c[4] for c in daily]
     highs = [c[2] for c in daily]
     lows = [c[1] for c in daily]
 
-    hourly = http_get("https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=3600")
+    hourly = http_get(f"{base}/{product}/candles?granularity=3600")
     hourly = sorted(hourly, key=lambda c: c[0])
     h_closes = [c[4] for c in hourly]
     h_rets = log_returns(h_closes)
@@ -153,9 +155,10 @@ def coinbase_spot_and_candles():
 
 def okx_perp(inst="BTC-USDT-SWAP"):
     base = "https://www.okx.com/api/v5"
+    idx_inst = inst.replace("-SWAP", "")        # BTC-USDT-SWAP -> BTC-USDT (index ticker)
     fr = http_get(f"{base}/public/funding-rate?instId={inst}")["data"][0]
     mark = float(http_get(f"{base}/public/mark-price?instType=SWAP&instId={inst}")["data"][0]["markPx"])
-    idx = float(http_get(f"{base}/market/index-tickers?instId=BTC-USDT")["data"][0]["idxPx"])
+    idx = float(http_get(f"{base}/market/index-tickers?instId={idx_inst}")["data"][0]["idxPx"])
     oi = http_get(f"{base}/public/open-interest?instType=SWAP&instId={inst}")["data"][0]
 
     hist = http_get(f"{base}/public/funding-rate-history?instId={inst}&limit=90")["data"]
@@ -193,19 +196,23 @@ def hyperliquid_perp(coin="BTC"):
     }
 
 
-def deribit_vol_and_basis():
-    """Current DVOL + dated-future basis term structure (annualized cash-and-carry)."""
+def deribit_vol_and_basis(currency="BTC", index_name="btc_usd"):
+    """Current DVOL + dated-future basis term structure (annualized cash-and-carry).
+    DVOL is None for assets without a volatility index (only BTC/ETH have one)."""
     base = "https://www.deribit.com/api/v2/public"
-    index = http_get(f"{base}/get_index_price?index_name=btc_usd")["result"]["index_price"]
+    index = http_get(f"{base}/get_index_price?index_name={index_name}")["result"]["index_price"]
 
     now_ms = int(time.time() * 1000)
     start_ms = now_ms - 3 * 24 * 3600 * 1000
-    dv = http_get(f"{base}/get_volatility_index_data?currency=BTC"
-                  f"&start_timestamp={start_ms}&end_timestamp={now_ms}&resolution=3600")["result"]["data"]
-    dvol = dv[-1][4] / 100.0 if dv else None
+    try:
+        dv = http_get(f"{base}/get_volatility_index_data?currency={currency}"
+                      f"&start_timestamp={start_ms}&end_timestamp={now_ms}&resolution=3600")["result"]["data"]
+        dvol = dv[-1][4] / 100.0 if dv else None
+    except Exception:       # noqa: BLE001 — no DVOL index for this currency
+        dvol = None
 
     # Skip contracts inside 2 days: annualizing ~0 basis over ~0 time is noise.
-    instruments = http_get(f"{base}/get_instruments?currency=BTC&kind=future&expired=false")["result"]
+    instruments = http_get(f"{base}/get_instruments?currency={currency}&kind=future&expired=false")["result"]
     dated = sorted((i for i in instruments if i["settlement_period"] != "perpetual"),
                    key=lambda i: i["expiration_timestamp"])
     term = []

@@ -17,6 +17,7 @@ import argparse
 
 from .core import (fmt_pct, fmt_vol, cc_vol, safe,
                    bs_delta, prob_between, expected_payoff)
+from .core.assets import get_asset
 from .core.blackscholes import prob_st_below
 from .core.sources import deribit_option_chain, deribit_chart
 
@@ -157,15 +158,20 @@ def print_structure(res, S):
 # --------------------------------------------------------------------------- #
 # Driver
 # --------------------------------------------------------------------------- #
-def run(short_delta=0.20, wing=5000.0, dte_target=None):
-    chain = safe("Deribit chain", deribit_option_chain)
-    if not chain:
+def run(short_delta=0.20, wing=5000.0, dte_target=None, asset="BTC"):
+    a = get_asset(asset)
+    chain = safe("Deribit chain", lambda: deribit_option_chain(a["deribit_ccy"], a["deribit_index"]))
+    if not chain or not chain["options"]:
+        print(f"No option chain for {asset}.")
         return
     S = chain["index"]
     opts = chain["options"]
+    if wing is None:
+        wing = 0.08 * S                  # scale the wing to the asset's price level
 
     # realized 30d vol (Deribit perp daily) for the EV measure
-    chart = safe("Deribit chart", lambda: deribit_chart("BTC-PERPETUAL", days=60, resolution="1D"))
+    perp = a["deribit_perp"] or "BTC-PERPETUAL"
+    chart = safe("Deribit chart", lambda: deribit_chart(perp, days=60, resolution="1D"))
     rv = cc_vol(chart["close"], 30) if chart else None
     sigma_rv = rv or 0.5
 
@@ -189,8 +195,8 @@ def run(short_delta=0.20, wing=5000.0, dte_target=None):
     exp_name = legs_at[0]["instrument"].split("-")[1]
     avg_short_iv = (short_call["iv"] + short_put["iv"]) / 2
     bar = "=" * 70
-    print(f"\n{bar}\nDEFINED-RISK SHORT-VOL STRUCTURES — Deribit BTC options\n{bar}")
-    print(f"Spot ${S:,.0f}   expiry {exp_name} ({dte:.0f} DTE)   short |Δ|≈{short_delta:.2f}   wings ${wing:,.0f}")
+    print(f"\n{bar}\nDEFINED-RISK SHORT-VOL STRUCTURES — Deribit {asset.upper()} options\n{bar}")
+    print(f"Spot ${S:,.2f}   expiry {exp_name} ({dte:.0f} DTE)   short |Δ|≈{short_delta:.2f}   wings ${wing:,.0f}")
     print(f"Short-strike IV {fmt_vol(avg_short_iv)}  vs  realized-30d {fmt_vol(rv)}  "
           f"->  VRP {fmt_vol(avg_short_iv - (rv or 0))}  "
           f"({'rich — selling favored' if avg_short_iv > (rv or 0) else 'cheap — selling NOT favored'})")
@@ -224,12 +230,13 @@ def run(short_delta=0.20, wing=5000.0, dte_target=None):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Defined-risk short-vol structures on Deribit BTC options")
+    ap = argparse.ArgumentParser(description="Defined-risk short-vol structures on Deribit options")
+    ap.add_argument("--asset", default="BTC", help="asset symbol (BTC, ETH, SOL, ...)")
     ap.add_argument("--dte", type=float, default=None, help="target days-to-expiry (default: nearest >= 14)")
     ap.add_argument("--delta", type=float, default=0.20, help="short-strike target |delta| (default 0.20)")
-    ap.add_argument("--wing", type=float, default=5000.0, help="wing width in USD (default 5000)")
+    ap.add_argument("--wing", type=float, default=None, help="wing width in USD (default: ~8%% of spot)")
     args = ap.parse_args()
-    run(short_delta=args.delta, wing=args.wing, dte_target=args.dte)
+    run(short_delta=args.delta, wing=args.wing, dte_target=args.dte, asset=args.asset)
 
 
 if __name__ == "__main__":

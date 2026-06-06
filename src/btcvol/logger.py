@@ -7,34 +7,42 @@ including the IV-surface skew (RR25/BF25), which has no public historical source
 Run:  python3 -m btcvol.logger
 """
 
+import argparse
 import csv
 
 import time
 
 from .core import safe, DATA_DIR
+from .core.assets import get_asset
 from .core.sources import (coinbase_spot_and_candles, okx_perp,
                            hyperliquid_perp, deribit_vol_and_basis,
                            deribit_option_chain)
 from .core.surface import build_surface, summary_metrics
 
-CSV_PATH = DATA_DIR / "timeseries.csv"
+CSV_PATH = DATA_DIR / "timeseries.csv"      # BTC series (default); other assets -> <asset>_timeseries.csv
 FIELDS = ["iso_time", "unix", "spot", "ret_30d", "rv_7d", "rv_30d", "dvol", "vrp",
           "okx_funding_apr", "hl_funding_apr", "okx_perp_premium_bps",
           "basis_near_ann_pct", "oi_total_usd",
           "atm_iv", "rr25", "bf25", "term_slope"]
 
 
+def csv_path_for(asset):
+    return DATA_DIR / ("timeseries.csv" if asset.upper() == "BTC"
+                       else f"{asset.lower()}_timeseries.csv")
+
+
 def _r(x, n):
     return round(x, n) if x is not None else None
 
 
-def collect():
-    cb = safe("coinbase", coinbase_spot_and_candles)
-    okx = safe("okx", okx_perp)
-    hl = safe("hyperliquid", hyperliquid_perp)
-    der = safe("deribit", deribit_vol_and_basis)
-    surf = safe("surface", lambda: build_surface(deribit_option_chain()))
-    sm = summary_metrics(surf) if surf else {}
+def collect(asset="BTC"):
+    a = get_asset(asset)
+    cb = safe("coinbase", lambda: coinbase_spot_and_candles(a["coinbase"])) if a["coinbase"] else None
+    okx = safe("okx", lambda: okx_perp(a["okx"])) if a["okx"] else None
+    hl = safe("hyperliquid", lambda: hyperliquid_perp(a["hl"])) if a["hl"] else None
+    der = safe("deribit", lambda: deribit_vol_and_basis(a["deribit_ccy"], a["deribit_index"]))
+    surf = safe("surface", lambda: build_surface(deribit_option_chain(a["deribit_ccy"], a["deribit_index"])))
+    sm = summary_metrics(surf) if surf and surf["expiries"] else {}
 
     dvol = der.get("dvol") if der else None
     rv30 = cb.get("rv_30d") if cb else None
@@ -99,10 +107,14 @@ def append_row(path, fields, row):
 
 
 def main():
-    row = collect()
-    append_row(CSV_PATH, FIELDS, row)
-    print(f"{row['iso_time']}  spot={row['spot']}  dvol={row['dvol']}  vrp={row['vrp']}  "
-          f"rr25={row['rr25']}  bf25={row['bf25']}  hl_fund={row['hl_funding_apr']}  -> {CSV_PATH}")
+    ap = argparse.ArgumentParser(description="Append one metrics row to data/<asset>_timeseries.csv")
+    ap.add_argument("--asset", default="BTC", help="asset symbol (BTC default -> timeseries.csv)")
+    name = ap.parse_args().asset.upper()
+    path = csv_path_for(name)
+    row = collect(name)
+    append_row(path, FIELDS, row)
+    print(f"[{name}] {row['iso_time']}  spot={row['spot']}  dvol={row['dvol']}  vrp={row['vrp']}  "
+          f"rr25={row['rr25']}  hl_fund={row['hl_funding_apr']}  -> {path}")
 
 
 if __name__ == "__main__":

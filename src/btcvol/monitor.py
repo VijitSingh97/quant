@@ -8,14 +8,15 @@ Two uses:
 Run:  python3 -m btcvol.monitor
 """
 
+import argparse
 import time
 
 from .core import (http_get, http_post, safe, DAYS, fmt_pct,
                    OKX_FUNDINGS_PER_DAY, HL_FUNDINGS_PER_DAY, DERIBIT_FUNDINGS_PER_DAY)
+from .core.assets import get_asset
 
 
-def _okx():
-    inst = "BTC-USDT-SWAP"
+def _okx(inst):
     d = http_get(f"https://www.okx.com/api/v5/public/funding-rate?instId={inst}")["data"][0]
     rate = float(d["fundingRate"])
     return {"venue": "OKX", "interval": "8h", "rate": rate,
@@ -23,24 +24,24 @@ def _okx():
             "next_apr": float(d.get("nextFundingRate") or "nan") * OKX_FUNDINGS_PER_DAY * DAYS}
 
 
-def _hyperliquid():
+def _hyperliquid(coin):
     meta, ctxs = http_post("https://api.hyperliquid.xyz/info", {"type": "metaAndAssetCtxs"})
-    i = next(k for k, a in enumerate(meta["universe"]) if a["name"] == "BTC")
+    i = next(k for k, a in enumerate(meta["universe"]) if a["name"] == coin)
     rate = float(ctxs[i]["funding"])
     return {"venue": "Hyperliquid", "interval": "1h", "rate": rate,
             "apr": rate * HL_FUNDINGS_PER_DAY * DAYS, "next_apr": None}
 
 
-def _deribit():
-    tk = http_get("https://www.deribit.com/api/v2/public/ticker?instrument_name=BTC-PERPETUAL")["result"]
+def _deribit(perp):
+    tk = http_get(f"https://www.deribit.com/api/v2/public/ticker?instrument_name={perp}")["result"]
     rate = float(tk.get("funding_8h") or 0.0)
     return {"venue": "Deribit", "interval": "8h", "rate": rate,
             "apr": rate * DERIBIT_FUNDINGS_PER_DAY * DAYS, "next_apr": None}
 
 
-def _kraken():
+def _kraken(ksym):
     data = http_get("https://futures.kraken.com/derivatives/api/v3/tickers")["tickers"]
-    t = next(x for x in data if x.get("symbol", "").lower() == "pf_xbtusd")
+    t = next(x for x in data if x.get("symbol", "").lower() == ksym.lower())
     # Kraken funding is hourly and quoted ABSOLUTE (quote ccy/contract); normalize by price.
     px = float(t.get("indexPrice") or t.get("markPrice"))
     rel = float(t["relativeFundingRate"]) if t.get("relativeFundingRate") is not None \
@@ -51,12 +52,22 @@ def _kraken():
 
 
 def main():
-    rows = [r for r in (safe("OKX", _okx), safe("Hyperliquid", _hyperliquid),
-                        safe("Deribit", _deribit), safe("Kraken", _kraken)) if r]
+    ap = argparse.ArgumentParser(description="Live cross-venue perp funding monitor")
+    ap.add_argument("--asset", default="BTC", help="asset symbol (BTC, ETH, SOL, ...)")
+    name = ap.parse_args().asset.upper()
+    a = get_asset(name)
+    if not a["has_perp"]:
+        print(f"{name} has no perp/funding venues.")
+        return
+
+    rows = [r for r in (safe("OKX", lambda: _okx(a["okx"])),
+                        safe("Hyperliquid", lambda: _hyperliquid(a["hl"])),
+                        safe("Deribit", lambda: _deribit(a["deribit_perp"])),
+                        safe("Kraken", lambda: _kraken(a["kraken"]))) if r]
     rows.sort(key=lambda r: r["apr"], reverse=True)
 
     bar = "=" * 70
-    print(f"\n{bar}\nLIVE BTC PERP FUNDING  {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}\n{bar}")
+    print(f"\n{bar}\nLIVE {name} PERP FUNDING  {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}\n{bar}")
     print(f"{'venue':12} {'interval':9} {'rate/period':>13} {'APR':>10}   {'(next APR)':>10}")
     for r in rows:
         nxt = fmt_pct(r['next_apr']) if r.get('next_apr') is not None and r['next_apr'] == r['next_apr'] else "—"
