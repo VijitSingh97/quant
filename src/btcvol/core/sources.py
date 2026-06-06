@@ -145,6 +145,48 @@ def yahoo_chart(symbol, rng="2y", interval="1d"):
     return {"ts": [t for t, _ in pairs], "closes": [c for _, c in pairs]}
 
 
+def hl_all_funding():
+    """Every Hyperliquid perp -> {coin: {apr, oi_usd, mark}} in one call (the broad scan)."""
+    meta, ctxs = http_post("https://api.hyperliquid.xyz/info", {"type": "metaAndAssetCtxs"})
+    out = {}
+    for a, c in zip(meta["universe"], ctxs):
+        try:
+            px = float(c["oraclePx"])
+            out[a["name"]] = {"apr": float(c["funding"]) * 24 * 365,
+                              "oi_usd": float(c["openInterest"]) * px, "mark": px}
+        except (KeyError, ValueError, TypeError):
+            continue
+    return out
+
+
+def hl_funding_stats(coin, days=14):
+    """Persistence of HL funding over `days`: annualized mean, range, % hours positive.
+    A high mean with most hours positive = structurally hot (e.g. hard-to-short XMR)."""
+    start = int(time.time() * 1000) - days * 24 * 3600 * 1000
+    rows = http_post("https://api.hyperliquid.xyz/info",
+                     {"type": "fundingHistory", "coin": coin, "startTime": start})
+    r = [float(x["fundingRate"]) for x in rows]
+    if not r:
+        return None
+    k = 24 * 365
+    return {"avg": statistics.mean(r) * k, "lo": min(r) * k, "hi": max(r) * k,
+            "pos_frac": sum(1 for x in r if x > 0) / len(r), "n": len(r)}
+
+
+def binance_all_funding():
+    """All Binance USDT perps -> {coin: apr} in one call (geo-blocked in some regions)."""
+    data = http_get("https://fapi.binance.com/fapi/v1/premiumIndex")
+    return {d["symbol"][:-4]: float(d["lastFundingRate"]) * 3 * 365
+            for d in data if d.get("symbol", "").endswith("USDT") and d.get("lastFundingRate")}
+
+
+def bybit_all_funding():
+    """All Bybit linear USDT perps -> {coin: apr} in one call (geo-blocked in some regions)."""
+    lst = http_get("https://api.bybit.com/v5/market/tickers?category=linear")["result"]["list"]
+    return {d["symbol"][:-4]: float(d["fundingRate"]) * 3 * 365
+            for d in lst if d.get("symbol", "").endswith("USDT") and d.get("fundingRate")}
+
+
 def deribit_option_chain(currency="BTC", index_name="btc_usd"):
     """Live BTC option chain -> {'index', 'options': [...]}.
 
