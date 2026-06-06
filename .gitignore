@@ -15,3 +15,6 @@ venv/
 # Runtime data — keep the directory, ignore captured snapshots/logs
 data/*
 !data/.gitkeep
+
+# secrets (live trading)
+.env

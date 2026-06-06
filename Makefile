@@ -1,6 +1,6 @@
 PY := PYTHONPATH=src python3
 
-.PHONY: help install dev test dashboard monitor carry vrp combined histskew robust condor-bt structures skew book size analyze macro backfill histskew2 log launchd-install launchd-uninstall clean
+.PHONY: help install dev test dashboard monitor carry vrp combined histskew robust condor-bt structures skew book size analyze macro backfill histskew2 live-paper live-monitor log launchd-install launchd-uninstall clean
 
 help:
 	@echo "make install            editable install (pip install -e .)"
@@ -22,6 +22,8 @@ help:
 	@echo "make macro              cross-asset VRP for equities/commodities (SPX/GOLD/OIL)"
 	@echo "make backfill           backfill historical skew from Tardis free monthly snapshots"
 	@echo "make histskew2          condor with REAL historical skew (Tardis) vs static"
+	@echo "make live-paper         run one paper reconcile cycle (carry, no real money)"
+	@echo "make live-monitor       live book status + audit trail"
 	@echo "make log                append one row to data/timeseries.csv"
 	@echo "make launchd-install    install the hourly logger launchd agent"
 	@echo "make launchd-uninstall  remove the launchd agent"
@@ -85,6 +87,12 @@ histskew2:
 
 log:
 	$(PY) -m btcvol.logger
+
+live-paper:
+	$(PY) -m btcvol.live.engine
+
+live-monitor:
+	$(PY) -m btcvol.live.monitor
 
 launchd-install:
 	./scripts/install_launchd.sh

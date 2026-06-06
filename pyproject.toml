@@ -33,6 +33,8 @@ btcvol-analyze    = "btcvol.analyze:main"
 btcvol-macro      = "btcvol.macro:main"
 btcvol-backfill   = "btcvol.backfill:main"
 btcvol-log        = "btcvol.logger:main"
+btcvol-live       = "btcvol.live.engine:main"
+btcvol-live-monitor = "btcvol.live.monitor:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
