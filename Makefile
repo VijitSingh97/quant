@@ -1,6 +1,6 @@
 PY := PYTHONPATH=src python3
 
-.PHONY: help install dev test test-integration dashboard monitor carry vrp combined histskew robust condor-bt structures skew book size analyze macro backfill carry-scan rotation histskew2 live-paper live-auto live-monitor live-web log launchd-install launchd-uninstall live-auto-install live-auto-uninstall clean
+.PHONY: help install dev test test-integration dashboard monitor carry vrp combined histskew robust condor-bt structures skew book size analyze macro backfill carry-scan rotation histskew2 live-paper live-auto live-monitor live-web log launchd-install launchd-uninstall live-auto-install live-auto-uninstall docker-up docker-down docker-logs clean
 
 help:
 	@echo "make install            editable install (pip install -e .)"
@@ -34,6 +34,9 @@ help:
 	@echo "make launchd-uninstall  remove the launchd agent"
 	@echo "make live-auto-install  install the hourly auto-rotating PAPER agent"
 	@echo "make live-auto-uninstall remove the auto-rotating agent"
+	@echo "make docker-up          build + run the home-server stack (scheduler + web)"
+	@echo "make docker-down        stop the docker stack (keeps the data volume)"
+	@echo "make docker-logs        tail the scheduler logs"
 
 install:
 	pip install -e .
@@ -127,6 +130,15 @@ live-auto-install:
 
 live-auto-uninstall:
 	./scripts/uninstall_live_auto.sh
+
+docker-up:
+	docker compose up -d --build
+
+docker-down:
+	docker compose down
+
+docker-logs:
+	docker compose logs -f basis
 
 clean:
 	rm -rf build dist *.egg-info src/*.egg-info .pytest_cache

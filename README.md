@@ -116,6 +116,13 @@ Risk gate (USD limits + kill switch), SQLite audit store, read-only-first Hyperl
 client, and an auto allocator with a liquidity floor + spot-able universe + hysteresis.
 Full details, the phased path to live, and the API-key posture are in **README_live.md**.
 
+**Deploy on a home server (Docker):** a self-contained, power-loss- and network-blip-
+resilient stack (scheduler + dashboard, SQLite-WAL on a named volume):
+```bash
+cp .env.example .env && docker compose up -d --build      # dashboard at :8787
+```
+See [README_live.md](README_live.md#deploy-on-a-home-server-docker--recommended) for the full guide.
+
 ---
 
 ## Project layout

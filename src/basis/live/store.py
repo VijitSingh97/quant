@@ -36,8 +36,15 @@ CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT);
 
 class Store:
     def __init__(self, path):
-        self.db = sqlite3.connect(str(path))
+        self.db = sqlite3.connect(str(path), timeout=30)
         self.db.row_factory = sqlite3.Row
+        # Crash/power-loss durability + safe concurrent reader (the web GUI) alongside
+        # the writer (the scheduler): WAL survives an abrupt kill without corruption,
+        # synchronous=NORMAL flushes the WAL at each checkpoint, busy_timeout waits out
+        # a brief lock instead of erroring.
+        self.db.execute("PRAGMA journal_mode=WAL")
+        self.db.execute("PRAGMA synchronous=NORMAL")
+        self.db.execute("PRAGMA busy_timeout=30000")
         self.db.executescript(SCHEMA)
         self.db.commit()
 

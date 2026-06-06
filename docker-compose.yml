@@ -1,0 +1,47 @@
+# basis — home-server deployment.
+#   cp .env.example .env   # (optional: tweak capital / mode / HL address)
+#   docker compose up -d --build
+#   open http://<server-ip>:8787   ·   docker compose logs -f basis
+#
+# Two services share one named volume (basis-data): the scheduler writes the books,
+# the web dashboard reads them. Both restart on boot / crash. Data survives recreation.
+
+services:
+  basis:
+    build: .
+    image: basis:latest
+    container_name: basis
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      BASIS_MODE: ${BASIS_MODE:-paper}            # paper unless you deliberately set live
+      BASIS_CYCLE_SECONDS: ${BASIS_CYCLE_SECONDS:-3600}
+      BASIS_TASKS: ${BASIS_TASKS:-logger,paper,auto}
+    volumes:
+      - basis-data:/app/data
+    # healthcheck is defined in the image (HEALTHCHECK)
+
+  web:
+    build: .
+    image: basis:latest
+    container_name: basis-web
+    restart: unless-stopped
+    command: ["python", "-m", "basis.live.web"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      BASIS_WEB_HOST: 0.0.0.0                       # reachable from the LAN (read-only UI)
+      BASIS_WEB_PORT: ${BASIS_WEB_PORT:-8787}
+      BASIS_DB: ${BASIS_WEB_DB:-live_auto.db}       # show the auto-rotating book by default
+    ports:
+      - "${BASIS_WEB_PORT:-8787}:8787"
+    volumes:
+      - basis-data:/app/data
+    depends_on:
+      - basis
+
+volumes:
+  basis-data:

@@ -38,11 +38,55 @@ carry-opportunities panel, the read-only live account (if configured), and the l
 **audit trail** — auto-refreshing every 5s. The CLI (`make live-monitor`) shows the
 same POSITION block in text.
 
-## Scheduled paper trading (Phase 2 — done)
+## Deploy on a home server (Docker) — recommended
+
+A self-contained stack for an always-on box. One `restart: unless-stopped` scheduler
+runs the cycles hourly; a web service serves the dashboard; both share a named volume
+so the SQLite books + CSV survive container recreation. Built to ride out the two
+things that actually happen at home — **power loss** and **flaky network**.
 
 ```bash
-./scripts/install_live_paper.sh     # launchd agent: hourly paper reconcile (no real money)
-./scripts/uninstall_live_paper.sh   # remove it
+git clone https://github.com/VijitSingh97/quant.git && cd quant
+cp .env.example .env        # optional: tweak capital / interval / HL address
+docker compose up -d --build
+# dashboard: http://<server-ip>:8787   ·   logs: docker compose logs -f basis
+```
+
+Update / restart / stop:
+```bash
+git pull && docker compose up -d --build      # roll forward to a new version
+docker compose restart basis                  # restart just the scheduler
+docker compose down                           # stop (named volume basis-data is kept)
+```
+
+Kill switch (halts ALL trading instantly, paper or live):
+```bash
+docker compose exec basis touch  /app/data/KILL_SWITCH    # stop
+docker compose exec basis rm     /app/data/KILL_SWITCH    # resume
+```
+
+**Resilience built in**
+- **Power loss** → `restart: unless-stopped` brings both services back on boot; the
+  scheduler just resumes its loop, and SQLite **WAL mode** (`synchronous=NORMAL`) means
+  an abrupt kill mid-write doesn't corrupt the book.
+- **Network blips** → every HTTP call retries with backoff (DNS hiccup / timeout / 429 /
+  5xx); a cycle that still fails is logged and **skipped — the loop never dies**. A
+  Docker `HEALTHCHECK` watches a heartbeat the scheduler writes each cycle.
+- **Self-contained** → stdlib-only, so the image is just Python + the package (no DB
+  server, no third-party deps). Runs as a non-root user. `BASIS_MODE=paper` by default;
+  live order signing stays gated regardless.
+- **Config** → all via `.env` (`BASIS_*`, legacy `BTCVOL_*` honoured). `BASIS_TASKS`
+  selects which cycles run (`logger,paper,auto`); `BASIS_CYCLE_SECONDS` the interval;
+  the data volume lives at `/app/data` (`BASIS_DATA_DIR`).
+
+## Scheduled paper trading on macOS (launchd)
+
+For a Mac you leave running (instead of Docker), the same cycles install as launchd
+agents:
+```bash
+./scripts/install_live_paper.sh     # hourly fixed-asset paper reconcile (data/live.db)
+./scripts/install_live_auto.sh      # hourly auto-rotating paper allocator (data/live_auto.db)
+./scripts/uninstall_live_paper.sh   # remove
 ```
 
 Runs the carry engine hourly like the data logger; accrues funding and builds the

@@ -72,9 +72,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 def main():
     port = int(os.environ.get("BASIS_WEB_PORT", "8787"))
-    print(f"basis.live dashboard -> http://localhost:{port}   (Ctrl-C to stop)")
+    # Default to loopback for safe local/CLI use; containers set 0.0.0.0 to be reachable.
+    host = os.environ.get("BASIS_WEB_HOST", "127.0.0.1")
+    print(f"basis.live dashboard -> http://{host}:{port}   (Ctrl-C to stop)")
     socketserver.TCPServer.allow_reuse_address = True
-    with socketserver.TCPServer(("127.0.0.1", port), Handler) as httpd:
+    with socketserver.TCPServer((host, port), Handler) as httpd:
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:

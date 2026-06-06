@@ -1,0 +1,17 @@
+# Keep the build context minimal — only pyproject, README, and src are needed.
+.git
+.gitignore
+**/__pycache__
+**/*.pyc
+*.egg-info
+src/*.egg-info
+.pytest_cache
+.venv
+venv
+data
+.env
+tests
+deploy
+scripts
+examples
+*.log
