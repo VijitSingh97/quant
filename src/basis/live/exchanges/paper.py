@@ -46,11 +46,19 @@ class PaperExchange(ExchangeClient):
     def _q(self, leg):
         return self.store.positions().get(leg, {}).get("qty", 0.0)
 
+    def _avg(self, leg):
+        return self.store.positions().get(leg, {}).get("avg_price", 0.0)
+
     def positions(self):
         return {"spot": self._q("spot"), "perp": self._q("perp")}
 
     def equity_usd(self):
-        return self._q("cash_usd") + self._q("spot") * self.mark_price() + self._q("funding_usd")
+        # Mark BOTH legs: the spot leg via cash+spot·mark, the perp via its unrealized PnL
+        # vs entry. For a delta-neutral book (spot = −perp at matched entries) the two price
+        # exposures cancel, so equity moves only with funding and fees — NOT with price.
+        mark = self.mark_price()
+        perp_pnl = self._q("perp") * (mark - self._avg("perp"))
+        return self._q("cash_usd") + self._q("spot") * mark + perp_pnl + self._q("funding_usd")
 
     def accrue_funding(self, elapsed_hours=None):
         """Credit funding to a short perp (or debit a long) since the last accrual."""
@@ -65,14 +73,29 @@ class PaperExchange(ExchangeClient):
 
     def place_order(self, order):
         mark = self.mark_price()
-        # transaction cost (taker fee + slippage) on notional — charged on BOTH legs so
-        # the perp leg's cost isn't invisible. Filled at mark; the cost is the explicit drag.
+        # transaction cost (taker fee + slippage) on notional — charged on BOTH legs so the
+        # perp leg's cost isn't invisible. Filled at mark; the cost is the explicit drag.
         cost = order.qty * mark * config.COST_PER_LEG_BPS / 1e4
-        new_leg = self._q(order.leg) + order.signed_qty
-        self.store.set_position(order.leg, new_leg, mark)
-        if order.leg == "spot":                      # spot moves cash by notional; perp is margin
-            self.store.set_position("cash_usd", self._q("cash_usd") - order.signed_qty * mark - cost, 1.0)
+        q0, dq = self._q(order.leg), order.signed_qty
+        q1 = q0 + dq
+        cash = self._q("cash_usd") - cost                       # the fee always hits cash
+        if order.leg == "spot":
+            cash -= dq * mark                                   # spot moves cash by notional (valued at mark)
+            self.store.set_position("spot", q1, mark)
         else:
-            self.store.set_position("cash_usd", self._q("cash_usd") - cost, 1.0)   # perp: just the fee
+            # perp is margin (no notional cash flow). Track a weighted-average entry and
+            # realize PnL into cash when the position is reduced/closed, so equity is exact.
+            avg0 = self._avg("perp")
+            if q0 != 0 and (q1 == 0 or (q0 > 0) != (q1 > 0) or abs(q1) < abs(q0)):
+                if q1 != 0 and (q0 > 0) != (q1 > 0):            # flipped through zero
+                    cash += q0 * (mark - avg0)                  # realize all of q0; remainder opens at mark
+                    new_avg = mark
+                else:                                           # reduced (or closed to zero), same side
+                    cash += (q0 - q1) * (mark - avg0)
+                    new_avg = avg0 if q1 != 0 else 0.0
+            else:                                               # opening / adding in the same direction
+                new_avg = (q0 * avg0 + dq * mark) / q1 if q1 != 0 else mark
+            self.store.set_position("perp", q1, new_avg)
+        self.store.set_position("cash_usd", cash, 1.0)
         self.store.set_position("fees_usd", self._q("fees_usd") - cost, 0.0)
         return {"status": "filled", "price": mark, "qty": order.qty, "cost": round(cost, 6)}

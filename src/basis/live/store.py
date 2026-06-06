@@ -103,7 +103,7 @@ class Store:
         return dict(r) if r else None
 
     def pnl_history(self, n=300):
-        cur = self.db.execute("SELECT ts, equity_usd, net_delta_btc FROM pnl ORDER BY id DESC LIMIT ?", (n,))
+        cur = self.db.execute("SELECT ts, equity_usd, net_delta_btc, note FROM pnl ORDER BY id DESC LIMIT ?", (n,))
         return list(reversed([dict(r) for r in cur.fetchall()]))
 
     # --- key-value meta (e.g. currently held asset for the auto allocator) ---

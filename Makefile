@@ -1,6 +1,6 @@
 PY := PYTHONPATH=src python3
 
-.PHONY: help install dev test test-integration dashboard monitor carry vrp combined histskew robust condor-bt structures skew book size analyze macro backfill carry-scan rotation regime validate tune preflight histskew2 live-paper live-auto live-monitor live-web log launchd-install launchd-uninstall live-auto-install live-auto-uninstall docker-up docker-down docker-logs clean
+.PHONY: help install dev test test-integration dashboard monitor carry vrp combined histskew robust condor-bt structures skew book size analyze macro backfill carry-scan rotation regime validate tune preflight report report-auto histskew2 live-paper live-auto live-monitor live-web log launchd-install launchd-uninstall live-auto-install live-auto-uninstall docker-up docker-down docker-logs clean
 
 help:
 	@echo "make install            editable install (pip install -e .)"
@@ -28,6 +28,8 @@ help:
 	@echo "make validate           run the self-validation report now (-> research.db)"
 	@echo "make tune               list tuning suggestions (apply: basis-tune --apply <id>)"
 	@echo "make preflight          live-readiness go/no-go check (places NO orders)"
+	@echo "make report             period performance review of the book (the re-eval tool)"
+	@echo "make report-auto        period performance review of the auto-rotating book"
 	@echo "make histskew2          condor with REAL historical skew (Tardis) vs static"
 	@echo "make live-paper         run one paper reconcile cycle (carry, no real money)"
 	@echo "make live-auto          auto-select the best persistent-carry asset and rotate (paper)"
@@ -116,6 +118,12 @@ tune:
 
 preflight:
 	-$(PY) -m basis.live.preflight
+
+report:
+	$(PY) -m basis.live.report
+
+report-auto:
+	BASIS_DB=live_auto.db $(PY) -m basis.live.report
 
 histskew2:
 	$(PY) -m basis.backtests.structures --histskew

@@ -64,6 +64,11 @@
     <div class="card"><h3>Funding rate</h3><div id="apr" class="big">—</div><div id="carry" class="sub">—</div></div>
   </div>
 
+  <div class="card" style="margin-bottom:12px">
+    <h3>Performance — since inception (net of fees)</h3>
+    <div id="perf" class="sub">—</div>
+  </div>
+
   <div class="row2">
     <div class="card">
       <h3>Carry book — target vs actual</h3>
@@ -203,6 +208,17 @@ async function tick(){
     const parts=Object.entries(ov).map(([k,val])=>k.replace('AUTO_','').toLowerCase()+'='+val);
     $('valState').innerHTML+=` <span class="amb">· tuned overrides applied: ${parts.join(', ')}</span>`;
   }
+
+  // performance since inception — the running scorecard for the multi-month paper run
+  const pf=s.performance;
+  if(pf&&pf.ok){
+    const shp=pf.sharpe==null?'n/a':pf.sharpe.toFixed(2);
+    $('perf').innerHTML=
+      `<b class="${pf.total_return>=0?'pos':'neg'}">${pct(pf.total_return)}</b> total · `
+      +`<b>${pct(pf.apr)}</b> APR · Sharpe ${shp} · maxDD ${pct(pf.max_drawdown)}`
+      +` <span class="mut">· ${pf.period_days.toFixed(1)}d, ${pf.cycles} cycles · funding +${usd(pf.funding_earned)}`
+      +` · fees ${usd(pf.fees_paid)} · ${pf.rotations} rotations</span>`;
+  } else if(pf){ $('perf').textContent=pf.error||'—'; }
 
   $('log').innerHTML=(s.audit||[]).map(e=>{
     const tm=new Date(e.ts*1000).toLocaleTimeString();

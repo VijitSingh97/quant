@@ -112,6 +112,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             s["live"] = c["live"]
             s["validation"] = _research(lambda st: st.latest_report("validation"))
             s["overrides"] = config.load_overrides()      # tuner-applied params (#18)
+            store2 = Store(config.DB_PATH)
+            try:
+                from .report import compute as _perf
+                s["performance"] = _perf(store2)          # since-inception summary
+            finally:
+                store2.close()
             self._send(200, json.dumps(s, default=str).encode(), "application/json")
         elif self.path.startswith("/api/reports"):
             data = _research(lambda st: st.recent_reports("validation", 50))

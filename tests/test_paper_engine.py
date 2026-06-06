@@ -68,6 +68,35 @@ def test_fees_reduce_equity_and_are_tracked(tmp_path):
     assert px.equity_usd() <= 6000 + fees + 1e-6                          # equity is net of fees
 
 
+class MovingPaper(FixedPaper):
+    """FixedPaper whose mark can move, to test mark-to-market accounting."""
+    _mark = 60000.0
+
+    def mark_price(self, symbol=None):
+        return self._mark
+
+
+def test_equity_is_price_independent_when_delta_neutral(tmp_path):
+    px = MovingPaper(Store(tmp_path / "m.db"), 6000.0)
+    px.place_order(Order("BTC", "buy", 0.05, "spot"))
+    px.place_order(Order("BTC", "sell", 0.05, "perp"))     # delta-neutral at 60000
+    eq0 = px.equity_usd()
+    px._mark = 66000.0                                       # +10%
+    assert abs(px.equity_usd() - eq0) < 1e-6                # price move must NOT change equity
+    px._mark = 54000.0                                       # -10%
+    assert abs(px.equity_usd() - eq0) < 1e-6
+
+
+def test_perp_realizes_pnl_on_close(tmp_path):
+    px = MovingPaper(Store(tmp_path / "r.db"), 6000.0)
+    px.place_order(Order("BTC", "sell", 0.1, "perp"))       # short 0.1 @ 60000
+    px._mark = 54000.0                                       # down 6000 -> short gains ~0.1*6000=600
+    cash0 = px.store.positions()["cash_usd"]["qty"]
+    px.place_order(Order("BTC", "buy", 0.1, "perp"))        # cover -> realize PnL into cash
+    assert abs(px.positions()["perp"]) < 1e-9
+    assert 594 < (px.store.positions()["cash_usd"]["qty"] - cash0) < 596   # +600 minus cover fee
+
+
 def test_accrue_funding_credits_short(tmp_path):
     px = _px(tmp_path)
     px.place_order(Order("BTC", "sell", 0.1, "perp"))          # short 0.1
