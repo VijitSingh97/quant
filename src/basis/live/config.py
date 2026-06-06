@@ -64,6 +64,12 @@ SYMBOL = _env("SYMBOL", "BTC").upper()            # deploy asset (BTC/ETH/SOL/HY
 CAPITAL_BTC = _f("CAPITAL_BTC", "0.1")            # paper seed / target capital
 DEPLOY_FRACTION = _f("DEPLOY_FRACTION", "0.85")   # rest held as buffer
 FUNDING_TIMED = _env("FUNDING_TIMED", "1") == "1"
+# Hysteresis band for funding-timing, so we don't flap (and pay a round-trip fee) on tiny
+# zero-crossings: only DEPLOY when funding clears +enter, only FLATTEN when it drops below
+# -exit; HOLD whatever we're doing in between. Flattening to dodge mildly-negative funding
+# costs more than it saves unless funding stays negative for weeks (see the break-even).
+FUNDING_ENTER_APR = _f("FUNDING_ENTER_APR", "0.03")   # deploy only above +3% APR
+FUNDING_EXIT_APR = _f("FUNDING_EXIT_APR", "-0.02")    # flatten only below -2% APR
 
 # --- trading costs (charged on every fill so profitability is reported NET of fees) ---
 TAKER_FEE_BPS = _f("TAKER_FEE_BPS", "4.5")        # HL taker ~4.5 bps (volume-tiered)

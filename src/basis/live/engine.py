@@ -43,8 +43,9 @@ def reconcile(client, store):
         store.log("funding_accrued", {"usd": round(credited, 6)})
 
     equity = client.equity_usd()
-    target = carry_target(equity, mark, funding)
     current = client.positions()
+    currently_on = (abs(current.get("spot", 0.0)) + abs(current.get("perp", 0.0))) * mark > config.MIN_ORDER_USD
+    target = carry_target(equity, mark, funding, currently_on=currently_on)
     target_delta = target["spot"] + target["perp"]
     store.log("cycle", {"mark": mark, "funding_apr": round(funding, 4), "equity": round(equity, 2),
                         "current": current, "target": target})

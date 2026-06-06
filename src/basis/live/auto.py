@@ -84,7 +84,9 @@ def cycle(store):
         if credited:
             store.log("funding_accrued", {"usd": round(credited, 6)})
         mark, funding, equity = px.mark_price(), px.funding_apr(), px.equity_usd()
-        _reconcile(px, store, carry_target(equity, mark, funding), mark, equity)
+        # the selector already vetted this asset on persistent funding, so use the hold
+        # threshold (deploy unless instantaneous funding is clearly negative — no flapping).
+        _reconcile(px, store, carry_target(equity, mark, funding, currently_on=True), mark, equity)
 
     pos = px.positions()
     net = pos["spot"] + pos["perp"]

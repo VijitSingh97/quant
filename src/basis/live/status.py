@@ -105,13 +105,17 @@ def build_status(store, market=None, include_live=True, opps=None):
         from .exchanges.hyperliquid import HyperliquidClient
         live = live_account(HyperliquidClient())
     kill = config.KILL_FILE.exists()
-    carry_on = (market["funding_apr"] > 0) or (not config.FUNDING_TIMED)
+    engaged = (abs(book["spot"]) + abs(book["perp"])) * market["mark"] > config.MIN_ORDER_USD
+    # carry_on reflects the hysteretic target: stay on while deployed unless funding < exit;
+    # deploy from flat only above enter.
+    carry_on = (not config.FUNDING_TIMED) or (
+        market["funding_apr"] > (config.FUNDING_EXIT_APR if engaged else config.FUNDING_ENTER_APR))
     return {
         "ts": time.time(), "mode": config.MODE, "venue": config.VENUE, "symbol": symbol,
         "kill": kill,
         "market": market,
         "carry_on": carry_on,
-        "target": carry_target(equity, market["mark"], market["funding_apr"]),
+        "target": carry_target(equity, market["mark"], market["funding_apr"], currently_on=engaged),
         "position": position_summary(symbol, market["mark"], book, equity,
                                      carry_on=carry_on, kill=kill),
         "paper": book, "live": live, "equity": equity,

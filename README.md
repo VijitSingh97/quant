@@ -252,7 +252,7 @@ make test              # offline unit suite (default, ~0.1s)
 make test-integration  # opt-in: hit live venues and assert response shapes
 ```
 
-**169 tests, fully offline** (no network — the suite runs in ~0.3s). Coverage spans the
+**176 tests, fully offline** (no network — the suite runs in ~0.3s). Coverage spans the
 pure logic: vol math / Sharpe / drawdown / Pearson, Black-Scholes + greeks + strike-from-
 delta, the IV-surface smile/skew fit, position sizing, the asset registry, the backtest
 factor math (incl. the rotation `compute`/curve/alignment helpers), the auto-selector
@@ -267,8 +267,9 @@ guard), the **fee model** (fees reduce equity + are tracked), the **regime study
 helpers, the **guarded tuner** (bounds, apply, rollback, reset), and **live-readiness**
 (preflight checks + the live order **triple-gate**: blocked outside live, when unarmed,
 and when the kill switch is on), the **cross-venue** funding spread logic, the **period
-report** math, and **delta-neutral equity** (a price move leaves a hedged book's equity
-unchanged) — all offline.
+report** math, **delta-neutral equity** (a price move leaves a hedged book's equity
+unchanged), and the **funding-timing hysteresis** (deploy/hold/flatten bands that stop
+fee-churn on zero-crossings) — all offline.
 
 **Integration suite (opt-in, `-m integration`)** — 14 live-venue *smoke* tests that hit
 the real endpoints (Hyperliquid, Coinbase, Deribit, OKX, Yahoo, Tardis, + the read-only

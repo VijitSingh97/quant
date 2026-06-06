@@ -61,11 +61,12 @@ Each cycle runs this pipeline:
               │ else         → hold X                      │
               └───────────────────┬───────────────────────┘
                                   ▼ chosen asset (or cash)
-              ┌─ 4. FUNDING-TIMING (allocator.carry_target)┐
-              │ funding > 0 → target long spot + short perp │
-              │   sized at deploy_fraction (85%) of equity  │
-              │ funding ≤ 0 → target FLAT (cash): never pay │
-              │   funding; sit out negative regimes         │
+              ┌─ 4. FUNDING-TIMING (allocator.carry_target) ┐
+              │ HYSTERESIS (anti-fee-churn):                 │
+              │  flat     → deploy only if funding > +enter  │
+              │  deployed → hold until funding < −exit       │
+              │  (band in between = no-trade hold zone)      │
+              │ deploy size = deploy_fraction (85%) of equity│
               └───────────────────┬───────────────────────┘
                                   ▼ target legs
               ┌─ 5. RECONCILE + RISK GATE (engine/auto) ──┐
@@ -89,8 +90,12 @@ Each cycle runs this pipeline:
 - **Hysteresis** — a small, persistent edge isn't worth paying 4 legs of fees to chase.
   Requiring a candidate to beat the held asset by a margin keeps turnover low (the
   backtest rotated 7× in 400 days). See `make rotation` for the evidence it pays.
-- **Funding-timing** — the carry only earns when funding is positive. When it flips
-  negative the target goes to cash, so you're either earning or flat, never bleeding.
+- **Funding-timing (with hysteresis)** — the carry earns when funding is positive, but
+  flattening costs a round-trip fee, so we use a deadband: **deploy only when funding
+  clears `+FUNDING_ENTER_APR` (3%), flatten only when it drops below `−FUNDING_EXIT_APR`
+  (−2%), hold in between**. This stops fee-churn near zero — flattening to dodge a brief,
+  mildly-negative funding dip costs far more than the funding it saves (a flatten+redeploy
+  is ~0.32% of equity; dodging −2% APR only pays off if it stays negative ~70 days).
 - **Clamp + risk gate** — orders are capped per cycle (so a big rebalance walks in over a
   few cycles instead of one fat fill) and every single order is checked against the USD
   risk limits and the kill switch before it can touch the book.
@@ -111,7 +116,9 @@ Each cycle runs this pipeline:
 | Switch margin | `BASIS_AUTO_SWITCH_MARGIN` | 0.05 | hysteresis: edge needed to rotate |
 | Exit funding | `BASIS_AUTO_EXIT_FUNDING` | 0.0 | drop the held asset below this avg |
 | Deploy fraction | `BASIS_DEPLOY_FRACTION` | 0.85 | how much equity to put to work |
-| Funding-timed | `BASIS_FUNDING_TIMED` | 1 | go flat when funding ≤ 0 |
+| Funding-timed | `BASIS_FUNDING_TIMED` | 1 | hysteretic on/off (anti-churn) |
+| Funding enter / exit | `BASIS_FUNDING_ENTER_APR` / `_EXIT_APR` | +3% / −2% | deploy / flatten thresholds (deadband stops fee-churn) |
+| Funding enter / exit | `BASIS_FUNDING_ENTER_APR` / `_EXIT_APR` | +3% / −2% | deploy / flatten thresholds |
 
 **Worked example (live, right now).** BTC perp funding is *negative* (≈ −2.5% APR), so a
 fixed-BTC carry sits **FLAT** (funding-timed). The auto allocator scans, sees **HYPE** at
