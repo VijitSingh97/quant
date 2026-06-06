@@ -8,7 +8,9 @@ plain dicts/lists; presentation lives in the tool modules.
 import gzip
 import math
 import statistics
+import socket
 import time
+import urllib.error
 import urllib.request
 from urllib.parse import quote
 
@@ -171,6 +173,41 @@ def hl_funding_stats(coin, days=14):
     k = 24 * 365
     return {"avg": statistics.mean(r) * k, "lo": min(r) * k, "hi": max(r) * k,
             "pos_frac": sum(1 for x in r if x > 0) / len(r), "n": len(r)}
+
+
+def hl_funding_series(coin, days=365, pause=0.35):
+    """Paginated hourly HL funding history -> [(ts_ms, rate), ...] oldest→newest.
+    HL returns ≤500 rows/call, so we walk startTime forward, pausing between pages
+    and backing off on 429 to stay under the rate limit. Used for backtests."""
+    now = int(time.time() * 1000)
+    start = now - days * 24 * 3600 * 1000
+    seen, out = set(), []
+    while start < now:
+        rows = None
+        for attempt in range(5):
+            try:
+                rows = http_post("https://api.hyperliquid.xyz/info",
+                                 {"type": "fundingHistory", "coin": coin, "startTime": start})
+                break
+            except (urllib.error.URLError, socket.timeout) as e:   # 429, timeout, transient
+                if attempt < 4:
+                    time.sleep(2.0 * (attempt + 1))                # exponential-ish backoff
+                    continue
+                raise
+        if not rows:
+            break
+        for x in rows:
+            t = int(x["time"])
+            if t not in seen:
+                seen.add(t)
+                out.append((t, float(x["fundingRate"])))
+        last = int(rows[-1]["time"])
+        if last < start or len(rows) < 500:    # caught up
+            break
+        start = last + 1
+        time.sleep(pause)
+    out.sort()
+    return out
 
 
 def binance_all_funding():

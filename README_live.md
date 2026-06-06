@@ -73,8 +73,10 @@ BASIS_SYMBOL=ETH make live-paper      # deploy the carry on ETH instead of BTC
 
 **Auto-select (rotating carry)** — the engine picks the best asset from the scan itself:
 ```bash
-make live-auto                          # paper; own book data/live_auto.db
-BASIS_DB=live_auto.db make live-web    # view the auto book in the dashboard
+make live-auto                          # one paper cycle; own book data/live_auto.db
+BASIS_DB=live_auto.db make live-web      # view the auto book in the dashboard
+make live-auto-install                   # run it hourly under launchd (paper)
+make live-auto-uninstall                 # stop it
 ```
 The auto allocator (`basis.live.auto` → `selector.py`) ranks markets by **persistent**
 (14d-avg) funding, requires a **liquidity floor** and a **spot-able universe**
@@ -85,12 +87,19 @@ asset stops qualifying — so it doesn't churn on hourly funding noise. Every ro
 order is risk-gated and audited. Example: it deploys **HYPE** (~+14% persistent, has HL
 spot) and reports that XMR (~+32%) is hotter but excluded for lack of co-located spot.
 
+**Does rotating actually pay?** Backtested (`make rotation`, 400d HL funding for
+BTC/ETH/SOL/HYPE, the real `select_asset` rule, 5 bps/leg): rotation returned
+**+12.4% APR net of cost vs a fixed BTC carry's +7.8% (+4.6%)**, with only **7 switches
+in 400 days** (hysteresis ⇒ low churn) and ~1% cost drag. It can't beat HYPE-with-
+hindsight (−1.5%), but that's the point — it *robustly captures* the best carry without
+having to guess the ex-ante winner. (Caveat: the high Sharpe reflects funding's low
+variance; the real risk is tail/liquidation/exchange events, which the curve excludes.)
+
 The funding-timed allocator stays flat (cash) on any asset whose funding is negative,
 so pointing it at a negative-funding asset correctly does nothing. Notes: you need a
 **spot leg** to be delta-neutral — trivial for BTC/ETH/SOL/HYPE (spot + perp on HL),
 needs cross-venue spot for other alts; and very high funding is usually thin/transient,
-not a gift. Auto-rotation to the best asset is a deliberate *future* step (with a
-liquidity floor + hysteresis so it doesn't churn on noise) — not on by default.
+not a gift.
 
 ## Read-only live account (Phase 1 — done)
 

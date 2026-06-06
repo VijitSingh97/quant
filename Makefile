@@ -1,6 +1,6 @@
 PY := PYTHONPATH=src python3
 
-.PHONY: help install dev test test-integration dashboard monitor carry vrp combined histskew robust condor-bt structures skew book size analyze macro backfill carry-scan histskew2 live-paper live-auto live-monitor live-web log launchd-install launchd-uninstall clean
+.PHONY: help install dev test test-integration dashboard monitor carry vrp combined histskew robust condor-bt structures skew book size analyze macro backfill carry-scan rotation histskew2 live-paper live-auto live-monitor live-web log launchd-install launchd-uninstall live-auto-install live-auto-uninstall clean
 
 help:
 	@echo "make install            editable install (pip install -e .)"
@@ -23,6 +23,7 @@ help:
 	@echo "make macro              cross-asset VRP for equities/commodities (SPX/GOLD/OIL)"
 	@echo "make backfill           backfill historical skew from Tardis free monthly snapshots"
 	@echo "make carry-scan         rank cross-asset funding (best carry to deploy now)"
+	@echo "make rotation           backtest carry rotation vs fixed (net of cost)"
 	@echo "make histskew2          condor with REAL historical skew (Tardis) vs static"
 	@echo "make live-paper         run one paper reconcile cycle (carry, no real money)"
 	@echo "make live-auto          auto-select the best persistent-carry asset and rotate (paper)"
@@ -31,6 +32,8 @@ help:
 	@echo "make log                append one row to data/timeseries.csv"
 	@echo "make launchd-install    install the hourly logger launchd agent"
 	@echo "make launchd-uninstall  remove the launchd agent"
+	@echo "make live-auto-install  install the hourly auto-rotating PAPER agent"
+	@echo "make live-auto-uninstall remove the auto-rotating agent"
 
 install:
 	pip install -e .
@@ -92,6 +95,9 @@ backfill:
 carry-scan:
 	$(PY) -m basis.carryscan
 
+rotation:
+	$(PY) -m basis.backtests.rotation
+
 histskew2:
 	$(PY) -m basis.backtests.structures --histskew
 
@@ -115,6 +121,12 @@ launchd-install:
 
 launchd-uninstall:
 	./scripts/uninstall_launchd.sh
+
+live-auto-install:
+	./scripts/install_live_auto.sh
+
+live-auto-uninstall:
+	./scripts/uninstall_live_auto.sh
 
 clean:
 	rm -rf build dist *.egg-info src/*.egg-info .pytest_cache
