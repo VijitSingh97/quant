@@ -225,12 +225,13 @@ order is risk-gated and audited. Example: it deploys **HYPE** (~+14% persistent,
 spot) and reports that XMR (~+32%) is hotter but excluded for lack of co-located spot.
 
 **Does rotating actually pay?** Backtested (`make rotation`, 400d HL funding for
-BTC/ETH/SOL/HYPE, the real `select_asset` rule, 5 bps/leg): rotation returned
-**+12.4% APR net of cost vs a fixed BTC carry's +7.8% (+4.6%)**, with only **7 switches
-in 400 days** (hysteresis ⇒ low churn) and ~1% cost drag. It can't beat HYPE-with-
-hindsight (−1.5%), but that's the point — it *robustly captures* the best carry without
-having to guess the ex-ante winner. (Caveat: the high Sharpe reflects funding's low
-variance; the real risk is tail/liquidation/exchange events, which the curve excludes.)
+BTC/ETH/SOL/HYPE, the real `select_asset` rule, **9.5 bps/leg = taker 4.5 + slippage 5**,
+the same cost the live book pays): rotation returned **+11.6% APR net of cost vs a fixed
+BTC carry's +7.8% (+3.8%)**, with only **7 switches in 400 days** (hysteresis ⇒ low churn)
+and ~1.6% cost drag. It can't beat HYPE-with-hindsight (−2.2%), but that's the point — it
+*robustly captures* the best carry without having to guess the ex-ante winner. (Caveat:
+the high Sharpe reflects funding's low variance; the real risk is tail/liquidation/
+exchange events, which the curve excludes.)
 
 The funding-timed allocator stays flat (cash) on any asset whose funding is negative,
 so pointing it at a negative-funding asset correctly does nothing. Notes: you need a
@@ -250,10 +251,17 @@ done materially better.
 make validate     # run one report now (-> research.db)   [basis-validate --force]
 ```
 
+**Walk-forward guard against overfitting (issue #18, Phase A — done).** A bigger
+in-sample number is usually just curve-fitting. So before suggesting any change, the
+validator runs a **walk-forward** check: on each fold it picks the best params *in-sample*
+on a train slice, then scores them *out-of-sample* on the next slice against the current
+config. It only recommends a change if re-tuning beats current **out-of-sample** too;
+otherwise it explicitly says *"in-sample sweep prefers X, but it does NOT generalise —
+keep current."* The report carries both the in-sample sweep and the walk-forward verdict.
+
 It **only suggests — it never changes live config.** Auto-tuning parameters on live
-capital is how you overfit yourself into a loss, so any suggested change is flagged
-"review before changing (in-sample edges overfit)" and left for you to apply by hand.
-(The *guarded*, walk-forward, human-approved version is scoped in
+capital is how you overfit yourself into a loss, so suggestions are left for you to apply
+by hand. (The remaining Phase B — an approval gate + bounded apply/rollback — stays in
 [issue #18](https://github.com/VijitSingh97/quant/issues/18); a regime-based carry-vs-vol
 switch is [issue #17](https://github.com/VijitSingh97/quant/issues/17).)
 

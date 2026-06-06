@@ -20,6 +20,23 @@ def test_compute_report_shape(monkeypatch):
     assert rep["current"]["vs_btc_apr"] is not None
 
 
+def test_walk_forward_out_of_sample(monkeypatch):
+    monkeypatch.setattr(config, "AUTO_SPOT_UNIVERSE", {"BTC", "ALT"})
+    series = {"BTC": [(i * 3600000, 0.00001) for i in range(2400)],     # 100d: long enough for folds
+              "ALT": [(i * 3600000, 0.00005) for i in range(2400)]}
+    wf = validate.walk_forward(series, folds=4)
+    assert wf["ok"] and wf["folds"] >= 1
+    for k in ("current_oos_apr", "retuned_oos_apr", "retune_edge_apr", "retune_helps_oos"):
+        assert k in wf
+    assert isinstance(wf["retune_helps_oos"], bool)
+
+
+def test_walk_forward_short_history_fails_gracefully():
+    series = {"BTC": [(i * 3600000, 0.0) for i in range(200)],
+              "ALT": [(i * 3600000, 0.0) for i in range(200)]}
+    assert not validate.walk_forward(series, folds=4)["ok"]
+
+
 def test_due_logic(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "RESEARCH_DB", tmp_path / "r.db")
     s = Store(config.RESEARCH_DB)
