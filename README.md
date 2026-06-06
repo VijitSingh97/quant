@@ -65,6 +65,7 @@ A `Makefile` wraps the common commands: `make dashboard`, `make monitor`,
 | `basis.skew` / `basis-skew` | Reads the live implied-vol **surface**: per-expiry ATM/25Δ vols, risk-reversal (RR25) and butterfly (BF25), the ATM term structure (contango/backwardation), an ASCII smile, and a fitted parametric skew shape that the condor backtest reuses. |
 | `basis.monitor` / `basis-monitor` | Live perp funding across 4 venues, normalized to APR, plus the cross-venue spread / arb flag. |
 | `basis.size` / `basis-size` | **Position sizer.** Vol-target scale (halve size when vol doubles) + fractional-Kelly stake from a win-rate/payoff. Flags: `--target-vol`, `--position-vol`, `--win-prob`, `--win-loss`. |
+| `basis.execost` / `basis-execost` | **Real order-book execution cost.** Pulls the live Hyperliquid L2 book and walks it to show the true slippage to enter/exit the carry at your size, vs the flat assumption the paper sim uses (so you can see what fills *actually* cost). `--usd`, `--universe`. `BASIS_REAL_DEPTH=1` makes the paper engine fill against live depth. |
 | `basis.backtests.rotation` / `basis-rotation` | **Backtests carry ROTATION vs fixed**, net of cost. Pulls HL hourly funding for the spot-able universe (BTC/ETH/SOL/HYPE), runs the *real* `select_asset` rule (trailing-avg rank + hysteresis), and compares rotating vs holding each fixed asset — APR, Sharpe, maxDD, switch count, cost drag, and a verdict. Validates whether `live-auto` is worth running. `--days`, `--window`, `--switch-margin`, `--cost-bps`, `--universe`. |
 | `basis.backtests.regime` / `basis-regime` | **Regime study** (issue #17 Phase A): does allocating carry-vs-vol *by regime* beat always-carry? Builds per-block carry + defined-risk-condor return streams, classifies each block by VRP (DVOL−RV) and vol-of-vol (causally, expanding medians — no look-ahead), and compares **always-carry vs static-combined vs regime-weighted** net of cost, with a verdict. Research only — the vol leg is modelled, not live. `--leverage`, `--risk`, `--asset`. |
 | `basis.carryscan` / `basis-carry-scan` | **Cross-asset/venue carry scanner.** Ranks **all** Hyperliquid perps (230, not just BTC) by **persistent** funding (multi-day average + % hours positive), surfacing structurally-hot, inefficiently-priced markets (e.g. XMR ~+32%, hard-to-short) vs one-hour spikes (PURR). Also pulls cross-venue funding from **Gate, KuCoin, dYdX** (+ Binance/Bybit where reachable) and lists the biggest **cross-venue funding spreads** — perp-vs-perp arb candidates (short the rich-funding venue, long the cheap one). `--min-oi`, `--top`, `--days`. |
@@ -155,6 +156,7 @@ quant/
 │   ├── macro.py              cross-asset VRP (equities/commodities via Yahoo)
 │   ├── backfill.py           historical skew from Tardis free monthly snapshots
 │   ├── carryscan.py          cross-asset/venue carry scanner (persistent funding)
+│   ├── execost.py            real order-book execution cost (slippage at your size)
 │   ├── logger.py             compact CSV time-series logger (scheduled target)
 │   ├── backtests/
 │   │   ├── carry.py          funding-carry backtest
@@ -170,6 +172,7 @@ quant/
 │       ├── blackscholes.py   BS pricing, delta, strike-from-delta, prob/EV
 │       ├── surface.py        IV surface: smile metrics, interpolation, skew fit
 │       ├── sizing.py         vol-target + fractional-Kelly sizing
+│       ├── execution.py      L2 order-book walker (real fill price / slippage)
 │       ├── assets.py         per-asset venue symbols (BTC/ETH/SOL/PAXG)
 │       ├── format.py         fmt_pct / fmt_vol / sparkline
 │       ├── sources.py        all exchange data pulls (asset-parameterized)
@@ -252,7 +255,7 @@ make test              # offline unit suite (default, ~0.1s)
 make test-integration  # opt-in: hit live venues and assert response shapes
 ```
 
-**176 tests, fully offline** (no network — the suite runs in ~0.3s). Coverage spans the
+**182 tests, fully offline** (no network — the suite runs in ~0.3s). Coverage spans the
 pure logic: vol math / Sharpe / drawdown / Pearson, Black-Scholes + greeks + strike-from-
 delta, the IV-surface smile/skew fit, position sizing, the asset registry, the backtest
 factor math (incl. the rotation `compute`/curve/alignment helpers), the auto-selector
@@ -268,8 +271,9 @@ helpers, the **guarded tuner** (bounds, apply, rollback, reset), and **live-read
 (preflight checks + the live order **triple-gate**: blocked outside live, when unarmed,
 and when the kill switch is on), the **cross-venue** funding spread logic, the **period
 report** math, **delta-neutral equity** (a price move leaves a hedged book's equity
-unchanged), and the **funding-timing hysteresis** (deploy/hold/flatten bands that stop
-fee-churn on zero-crossings) — all offline.
+unchanged), the **funding-timing hysteresis** (deploy/hold/flatten bands that stop
+fee-churn on zero-crossings), and the **order-book execution** walker (real-depth slippage
+for a fill size) — all offline.
 
 **Integration suite (opt-in, `-m integration`)** — 14 live-venue *smoke* tests that hit
 the real endpoints (Hyperliquid, Coinbase, Deribit, OKX, Yahoo, Tardis, + the read-only

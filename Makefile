@@ -1,6 +1,6 @@
 PY := PYTHONPATH=src python3
 
-.PHONY: help install dev test test-integration dashboard monitor carry vrp combined histskew robust condor-bt structures skew book size analyze macro backfill carry-scan rotation regime validate tune preflight report report-auto histskew2 live-paper live-auto live-monitor live-web log launchd-install launchd-uninstall live-auto-install live-auto-uninstall docker-up docker-down docker-logs clean
+.PHONY: help install dev test test-integration dashboard monitor carry vrp combined histskew robust condor-bt structures skew book size analyze macro backfill carry-scan execost rotation regime validate tune preflight report report-auto histskew2 live-paper live-auto live-monitor live-web log launchd-install launchd-uninstall live-auto-install live-auto-uninstall docker-up docker-down docker-logs clean
 
 help:
 	@echo "make install            editable install (pip install -e .)"
@@ -23,6 +23,7 @@ help:
 	@echo "make macro              cross-asset VRP for equities/commodities (SPX/GOLD/OIL)"
 	@echo "make backfill           backfill historical skew from Tardis free monthly snapshots"
 	@echo "make carry-scan         rank cross-asset funding (best carry to deploy now)"
+	@echo "make execost            real order-book slippage to fill the carry at your size"
 	@echo "make rotation           backtest carry rotation vs fixed (net of cost)"
 	@echo "make regime             regime study: carry vs vol allocation by regime (#17)"
 	@echo "make validate           run the self-validation report now (-> research.db)"
@@ -103,6 +104,9 @@ backfill:
 
 carry-scan:
 	$(PY) -m basis.carryscan
+
+execost:
+	$(PY) -m basis.execost
 
 rotation:
 	$(PY) -m basis.backtests.rotation

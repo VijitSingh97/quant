@@ -14,7 +14,7 @@ from basis.core.sources import (
     hyperliquid_perp, hl_all_funding, hl_funding_stats, coinbase_spot_and_candles,
     deribit_vol_and_basis, deribit_dvol, deribit_option_chain, deribit_funding_history,
     okx_perp, yahoo_chart, tardis_options_chain, binance_all_funding, bybit_all_funding,
-    gate_all_funding, kucoin_all_funding, dydx_all_funding,
+    gate_all_funding, kucoin_all_funding, dydx_all_funding, hl_l2_book,
 )
 from basis.live.exchanges.hyperliquid import HyperliquidClient
 
@@ -132,3 +132,9 @@ def test_kucoin_all_funding_shape():
 def test_dydx_all_funding_shape():
     m = fetch(dydx_all_funding)
     assert "BTC" in m and isinstance(m["BTC"], float) and len(m) > 20
+
+
+def test_hl_l2_book_shape():
+    b = fetch(lambda: hl_l2_book("BTC"))
+    assert b["mid"] > 0 and b["bids"] and b["asks"]
+    assert b["bids"][0][0] < b["asks"][0][0]        # best bid below best ask

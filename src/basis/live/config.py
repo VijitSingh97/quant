@@ -73,8 +73,11 @@ FUNDING_EXIT_APR = _f("FUNDING_EXIT_APR", "-0.02")    # flatten only below -2% A
 
 # --- trading costs (charged on every fill so profitability is reported NET of fees) ---
 TAKER_FEE_BPS = _f("TAKER_FEE_BPS", "4.5")        # HL taker ~4.5 bps (volume-tiered)
-SLIPPAGE_BPS = _f("SLIPPAGE_BPS", "5.0")          # modelled adverse fill on a market order
+SLIPPAGE_BPS = _f("SLIPPAGE_BPS", "5.0")          # modelled adverse fill (flat assumption)
 COST_PER_LEG_BPS = TAKER_FEE_BPS + SLIPPAGE_BPS   # total per-fill transaction cost (one source of truth)
+# If on, the paper engine replaces the flat slippage with REAL slippage walked from the
+# live L2 order book for each fill (taker fee still added). See `basis-execost`.
+REAL_DEPTH = _env("REAL_DEPTH", "0") == "1"
 
 # --- hard risk limits (enforced pre-trade; USD so they're asset-agnostic) ---
 MAX_NOTIONAL_USD = _f("MAX_NOTIONAL_USD", "10000")

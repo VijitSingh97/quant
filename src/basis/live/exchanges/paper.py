@@ -71,11 +71,21 @@ class PaperExchange(ExchangeClient):
         self.store.set_position("last_funding_ts", now, 0.0)
         return credit
 
+    def _slip_bps(self, order, mark):
+        """Slippage assumption per fill: flat by default, or real L2 depth if REAL_DEPTH."""
+        if not config.REAL_DEPTH:
+            return config.SLIPPAGE_BPS
+        from ...core import safe
+        from ...core.execution import quote
+        from ...core.sources import hl_l2_book
+        q = safe("l2-depth", lambda: quote(hl_l2_book(self.symbol), order.qty * mark, order.side))
+        return q["slippage_bps"] if q else config.SLIPPAGE_BPS
+
     def place_order(self, order):
         mark = self.mark_price()
         # transaction cost (taker fee + slippage) on notional — charged on BOTH legs so the
         # perp leg's cost isn't invisible. Filled at mark; the cost is the explicit drag.
-        cost = order.qty * mark * config.COST_PER_LEG_BPS / 1e4
+        cost = order.qty * mark * (config.TAKER_FEE_BPS + self._slip_bps(order, mark)) / 1e4
         q0, dq = self._q(order.leg), order.signed_qty
         q1 = q0 + dq
         cash = self._q("cash_usd") - cost                       # the fee always hits cash

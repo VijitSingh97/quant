@@ -175,6 +175,17 @@ def hl_funding_stats(coin, days=14):
             "pos_frac": sum(1 for x in r if x > 0) / len(r), "n": len(r)}
 
 
+def hl_l2_book(coin):
+    """Hyperliquid L2 order book for a perp -> {bids:[(px,sz)], asks:[(px,sz)], mid}.
+    Public/keyless. Used to compute real depth-based slippage for an order size."""
+    d = http_post("https://api.hyperliquid.xyz/info", {"type": "l2Book", "coin": coin})
+    levels = d.get("levels", [[], []])
+    bids = [(float(x["px"]), float(x["sz"])) for x in levels[0]]
+    asks = [(float(x["px"]), float(x["sz"])) for x in levels[1]]
+    mid = (bids[0][0] + asks[0][0]) / 2 if (bids and asks) else 0.0
+    return {"bids": bids, "asks": asks, "mid": mid}
+
+
 def hl_funding_series(coin, days=365, pause=0.35):
     """Paginated hourly HL funding history -> [(ts_ms, rate), ...] oldest→newest.
     HL returns ≤500 rows/call, so we walk startTime forward, pausing between pages
