@@ -36,6 +36,38 @@ def parkinson_vol(highs, lows, window=30):
     return math.sqrt(s / (4 * math.log(2) * n)) * math.sqrt(DAYS)
 
 
+def garman_klass(opens, highs, lows, closes, window=30):
+    """Garman-Klass annualized vol from OHLC — uses the whole bar, far more efficient
+    than close-to-close. Assumes no drift / no overnight gap."""
+    o, h, lo, c = opens[-window:], highs[-window:], lows[-window:], closes[-window:]
+    n = min(len(o), len(h), len(lo), len(c))
+    if n < 2:
+        return None
+    s = sum(0.5 * math.log(h[i] / lo[i]) ** 2
+            - (2 * math.log(2) - 1) * math.log(c[i] / o[i]) ** 2 for i in range(n))
+    return math.sqrt(s / n) * math.sqrt(DAYS)
+
+
+def yang_zhang(opens, highs, lows, closes, window=30):
+    """Yang-Zhang annualized vol — drift-independent and handles overnight gaps;
+    the most efficient of the range estimators. Needs >= ~3 bars."""
+    o, h, lo, c = opens[-window:], highs[-window:], lows[-window:], closes[-window:]
+    n = min(len(o), len(h), len(lo), len(c))
+    if n < 3:
+        return None
+    # overnight (close->open) and open->close variances
+    on = [math.log(o[i] / c[i - 1]) for i in range(1, n)]
+    oc = [math.log(c[i] / o[i]) for i in range(1, n)]
+    mu_on, mu_oc = statistics.mean(on), statistics.mean(oc)
+    v_on = sum((x - mu_on) ** 2 for x in on) / (n - 2)
+    v_oc = sum((x - mu_oc) ** 2 for x in oc) / (n - 2)
+    # Rogers-Satchell (drift-independent intraday)
+    rs = sum(math.log(h[i] / c[i]) * math.log(h[i] / o[i])
+             + math.log(lo[i] / c[i]) * math.log(lo[i] / o[i]) for i in range(1, n)) / (n - 1)
+    k = 0.34 / (1.34 + (n + 1) / (n - 1))
+    return math.sqrt(v_on + k * v_oc + (1 - k) * rs) * math.sqrt(DAYS)
+
+
 def max_drawdown(equity):
     """Max peak-to-trough drawdown of an equity curve (list of levels)."""
     peak, mdd = equity[0], 0.0

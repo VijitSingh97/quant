@@ -53,6 +53,8 @@ A `Makefile` wraps the common commands: `make dashboard`, `make monitor`,
 | `btcvol.backtests.vrp` / `btcvol-vrp` | Backtests selling 30d vol *naked* (DVOL vs forward realized). Win rate, avg premium, worst tail roll, Sharpe. |
 | `btcvol.backtests.robustness` / `btcvol-robust` | **Anti-overfit checks**: parameter sweep (Δ × wing), walk-forward (in/out-of-sample), and fee-drag — reuses one market pull. Verdict flags whether the edge is broad or a knife-edge. Flags: `--risk`, `--fee-bps`, `--flat`. |
 | `btcvol.backtests.combined` / `btcvol-combined` | **Combines the two engines into one book**: funding carry (levered) + the filtered, skew-priced condor, over a common window. Reports each leg vs combined (total/CAGR/Sharpe/maxDD) and the leg correlation. Flags: `--leverage`, `--risk`, `--flat`. |
+| `btcvol.backfill` / `btcvol-backfill` | **Backfills historical IV-surface skew** from Tardis.dev free monthly Deribit option-chain snapshots (back to 2020) → `data/skew_history.csv`. Gives real historical RR/BF *now* instead of waiting on the logger. `--asset`, `--start`. |
+| `btcvol.backtests.structures --histskew` | Condor backtest priced with **real per-roll historical skew** (from the Tardis backfill) vs the static fit — answers whether the static-skew approximation was biased. |
 | `btcvol.backtests.structures` / `btcvol-condor-bt` | Backtests the **monthly defined-risk condor rule**: rolls a delta-based iron condor (synthetic credit @ historical DVOL, real price path for the payoff), compares sell-every-month vs a DVOL>RV filter, and shows the capped tail vs the naked book. Flags: `--delta`, `--wing-pct`, `--risk`. |
 | `btcvol.structures` / `btcvol-structures` | Builds **defined-risk** short-vol structures (iron condor, put/call credit spreads) from the live Deribit chain. Prices legs conservatively (sell at bid, buy wings at ask) and reports max loss, breakevens, probability of profit (BS under implied), expected value under realized, and an ASCII payoff diagram. Flags: `--dte`, `--delta`, `--wing`. |
 | `btcvol.skew` / `btcvol-skew` | Reads the live implied-vol **surface**: per-expiry ATM/25Δ vols, risk-reversal (RR25) and butterfly (BF25), the ATM term structure (contango/backwardation), an ASCII smile, and a fitted parametric skew shape that the condor backtest reuses. |
@@ -110,6 +112,7 @@ quant/
 │   ├── book.py               delta-neutral book monitor (net-delta drift)
 │   ├── analyze.py            analyze our own captured timeseries.csv
 │   ├── macro.py              cross-asset VRP (equities/commodities via Yahoo)
+│   ├── backfill.py           historical skew from Tardis free monthly snapshots
 │   ├── logger.py             compact CSV time-series logger (launchd target)
 │   ├── backtests/
 │   │   ├── carry.py          funding-carry backtest
@@ -154,6 +157,7 @@ All public, no API keys. Chosen because they're reachable without geo-blocks:
 | **Deribit** | DVOL (30d implied vol), dated-futures basis, BTC-PERPETUAL funding history (hourly, ~3y) |
 | **OKX**, **Hyperliquid**, **Kraken Futures** | Live perp funding + open interest |
 | **Yahoo Finance** | Non-crypto (#10): equity/commodity ETFs + CBOE vol indices (`^VIX`/`^GVZ`/`^OVX`) for cross-asset VRP |
+| **Tardis.dev** (free tier) | Historical Deribit option chain (mark IV) for the **1st of each month back to 2020** — the historical skew surface, no API key |
 
 > Blocked from many regions: **Binance** (HTTP 451) and **Bybit** (HTTP 403) — not
 > used. Endpoints require a browser `User-Agent` (handled in `core/http.py`). OKX's
@@ -215,6 +219,12 @@ Backtests run on the full free history (DVOL backfills ~3y on Deribit; we use al
   cycle the legs are **negatively correlated (r≈−0.3)**, so the condor is a partial *hedge*
   to carry rather than a standalone earner. Vol-targeted combined: **+21% CAGR, Sharpe
   1.55, maxDD −11%** — sizing (vol-target), not selection, drives the risk-adjusted result.
+
+- **Real historical skew** (33 monthly Tardis snapshots, `--histskew`): pricing each
+  condor roll with the skew that *actually* prevailed gives CAGR **+4.9%** (Sharpe 0.32)
+  vs the static-fit's **+3.5%** — close, so applying today's shape historically was an
+  honest approximation (it mildly *understated* the edge). This validates the earlier
+  static-skew results on real data, **without waiting months** for our own logger.
 
 **Takeaway:** **carry is the workhorse; the condor is a marginal, parameter-sensitive
 overlay that earns its place as a vol-targeted *hedge*, not a return source.** Sell

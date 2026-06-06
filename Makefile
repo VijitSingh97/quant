@@ -1,6 +1,6 @@
 PY := PYTHONPATH=src python3
 
-.PHONY: help install dev test dashboard monitor carry vrp combined histskew robust condor-bt structures skew book size analyze macro log launchd-install launchd-uninstall clean
+.PHONY: help install dev test dashboard monitor carry vrp combined histskew robust condor-bt structures skew book size analyze macro backfill histskew2 log launchd-install launchd-uninstall clean
 
 help:
 	@echo "make install            editable install (pip install -e .)"
@@ -20,6 +20,8 @@ help:
 	@echo "make size               position sizer (vol-target + fractional Kelly)"
 	@echo "make analyze            analyze our own captured data/timeseries.csv"
 	@echo "make macro              cross-asset VRP for equities/commodities (SPX/GOLD/OIL)"
+	@echo "make backfill           backfill historical skew from Tardis free monthly snapshots"
+	@echo "make histskew2          condor with REAL historical skew (Tardis) vs static"
 	@echo "make log                append one row to data/timeseries.csv"
 	@echo "make launchd-install    install the hourly logger launchd agent"
 	@echo "make launchd-uninstall  remove the launchd agent"
@@ -74,6 +76,12 @@ analyze:
 
 macro:
 	$(PY) -m btcvol.macro
+
+backfill:
+	$(PY) -m btcvol.backfill --start 2023-09
+
+histskew2:
+	$(PY) -m btcvol.backtests.structures --histskew
 
 log:
 	$(PY) -m btcvol.logger

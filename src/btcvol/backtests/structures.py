@@ -18,18 +18,46 @@ Run:  python3 -m btcvol.backtests.structures [--delta 0.20] [--wing-pct 0.08] [-
 """
 
 import argparse
+import calendar
+import csv
 import math
 import statistics
 import time
 
 from ..core import (cc_vol, sharpe, max_drawdown, sparkline, fmt_pct, fmt_vol,
-                    bs_price, strike_for_delta)
+                    bs_price, strike_for_delta, DATA_DIR)
 from ..core.sources import deribit_dvol, deribit_chart
+from ..core.surface import skew_iv, skew_from_metrics
 
 HOLD = 30
 YEAR = 365.0
 ROLLS_PER_YEAR = YEAR / HOLD
 LOOKBACK_DAYS = 1000          # DVOL backfills ~3y free; cap is 1000d (~33 rolls vs ~13 at 400)
+
+
+def _date_ms(d):
+    return calendar.timegm(time.strptime(d, "%Y-%m-%d")) * 1000
+
+
+def load_skew_history(path):
+    """Read a Tardis-backfilled skew_history.csv -> [(date_ms, coeffs)] oldest->newest."""
+    out = []
+    with open(path, newline="") as f:
+        for r in csv.DictReader(f):
+            try:
+                atm = float(r["atm_iv"])
+                coeffs = skew_from_metrics(atm, float(r["rr25"]), float(r["bf25"]),
+                                           float(r["rr10"]) if r.get("rr10") else None,
+                                           float(r["bf10"]) if r.get("bf10") else None)
+                out.append((_date_ms(r["date"]), coeffs))
+            except (ValueError, KeyError, TypeError):
+                continue
+    out.sort()
+    return out
+
+
+def _nearest_coeffs(series, ts):
+    return min(series, key=lambda kv: abs(kv[0] - ts))[1] if series else (1.0, 0.0, 0.0)
 
 
 def _round(x, grid):
@@ -131,9 +159,11 @@ def load_market(skew=False, asset="BTC"):
             "iv_fn": iv_fn, "skew": skew, "skew_note": skew_note}
 
 
-def simulate_from(market, delta=0.20, wing_pct=0.08, grid=None, fee_bps=0.0):
+def simulate_from(market, delta=0.20, wing_pct=0.08, grid=None, fee_bps=0.0, skew_series=None):
     """Run the condor rolls against pre-loaded market data. fee_bps is a round-trip
-    cost (bps of notional) deducted from each roll's credit. grid auto-scales to spot."""
+    cost (bps of notional) deducted from each roll's credit. grid auto-scales to spot.
+    If skew_series is given, each roll is priced with the nearest historical skew
+    (per-roll) instead of the market's single static iv_fn."""
     S, IV, dates, T, iv_fn, skew = (market["S"], market["IV"], market["dates"],
                                     market["T"], market["iv_fn"], market["skew"])
     if grid is None:
@@ -144,7 +174,11 @@ def simulate_from(market, delta=0.20, wing_pct=0.08, grid=None, fee_bps=0.0):
         st0, iv0, d0 = S[i], IV[i], dates[i]
         rv_trail = cc_vol(S[: i + 1], 30) if i >= 31 else None
         rv_fwd = cc_vol(S[i: i + HOLD + 1], HOLD)
-        c = _condor(st0, iv0, T, delta, wing_pct, grid, iv_fn)
+        roll_iv_fn = iv_fn
+        if skew_series is not None:                  # per-roll historical skew
+            coeffs = _nearest_coeffs(skew_series, _date_ms(d0))
+            roll_iv_fn = (lambda cc: (lambda a, Tt, K, Ss: skew_iv(cc, a, Tt, K, Ss)))(coeffs)
+        c = _condor(st0, iv0, T, delta, wing_pct, grid, roll_iv_fn)
         credit_flat = _condor(st0, iv0, T, delta, wing_pct, grid)["credit"] if skew else c["credit"]
         fee = fee_bps / 1e4 * st0
         pnl = _expiry_pnl(c, S[i + HOLD]) - fee
@@ -222,15 +256,52 @@ def run(delta=0.20, wing_pct=0.08, risk=0.20, grid=None, skew=False, asset="BTC"
     print(" fitted shape to historical ATM vol (static-skew approx). Execution/fees not modeled.)")
 
 
+def run_histskew(asset="BTC", delta=0.20, wing_pct=0.08, risk=0.20, skew_path=None):
+    """Compare the filtered condor priced with REAL per-roll historical skew (Tardis
+    backfill) vs one static live-fit skew, over the full DVOL/price window."""
+    from ..core.assets import get_asset
+    if not get_asset(asset)["has_dvol"]:
+        print(f"{asset.upper()} has no DVOL index — try BTC or ETH.")
+        return
+    path = skew_path or (DATA_DIR / ("skew_history.csv" if asset.upper() == "BTC"
+                                     else f"{asset.lower()}_skew_history.csv"))
+    bar = "=" * 78
+    print(f"\n{bar}\nHISTORICAL-SKEW CONDOR — real per-roll skew (Tardis) vs static fit — {asset.upper()}\n{bar}")
+    if not path.exists():
+        print(f"No skew history at {path}. Run `python3 -m btcvol.backfill --asset {asset}` first.")
+        return
+    series = load_skew_history(path)
+    market = load_market(skew=True, asset=asset)          # static live-fit iv_fn
+    static = simulate_from(market, delta, wing_pct)["filtered"]
+    hist = simulate_from(market, delta, wing_pct, skew_series=series)["filtered"]
+    cov = [d for d in (market["dates"][0], market["dates"][-1])]
+    sk0 = time.strftime("%Y-%m", time.gmtime(series[0][0] / 1000)) if series else "?"
+    sk1 = time.strftime("%Y-%m", time.gmtime(series[-1][0] / 1000)) if series else "?"
+    print(f"window {cov[0]} -> {cov[1]}   {len(static)} rolls   "
+          f"historical skew: {len(series)} monthly snapshots ({sk0}..{sk1})")
+    print(f"\n  {'pricing':22} {'CAGR':>9} {'Sharpe':>8} {'maxDD':>9}")
+    for name, rolls in (("static (today's fit)", static), ("real historical skew", hist)):
+        s = _summarize("", rolls, risk)
+        sh = f"{s['sharpe']:.2f}" if s["sharpe"] is not None else "n/a"
+        print(f"  {name:22} {fmt_pct(s['cagr']):>9} {sh:>8} {fmt_pct(s['mdd']):>9}")
+    print(f"\nREAD\n• If the two rows agree, the static-skew approximation was fine; a gap means real")
+    print(f"  historical skew (richer/cheaper wings at the time) materially changed the edge.")
+    print(f"• Data is free monthly Tardis snapshots (#12) — no waiting on the logger (#4).")
+
+
 def main():
     ap = argparse.ArgumentParser(description="Backtest the monthly defined-risk condor-selling rule")
     ap.add_argument("--delta", type=float, default=0.20, help="short-strike target |delta| (default 0.20)")
     ap.add_argument("--wing-pct", type=float, default=0.08, help="wing width as fraction of spot (default 0.08)")
     ap.add_argument("--risk", type=float, default=0.20, help="capital fraction risked per roll for the compounding curve (default 0.20)")
     ap.add_argument("--skew", action="store_true", help="price legs with today's fitted skew shape (vs flat vol)")
+    ap.add_argument("--histskew", action="store_true", help="compare real per-roll historical skew (Tardis backfill) vs static fit")
     ap.add_argument("--asset", default="BTC", help="asset with a DVOL index (BTC or ETH)")
     args = ap.parse_args()
-    run(delta=args.delta, wing_pct=args.wing_pct, risk=args.risk, skew=args.skew, asset=args.asset)
+    if args.histskew:
+        run_histskew(asset=args.asset, delta=args.delta, wing_pct=args.wing_pct, risk=args.risk)
+    else:
+        run(delta=args.delta, wing_pct=args.wing_pct, risk=args.risk, skew=args.skew, asset=args.asset)
 
 
 if __name__ == "__main__":

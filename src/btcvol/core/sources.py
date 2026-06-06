@@ -5,12 +5,14 @@ Deribit. (Binance is 451 and Bybit 403 from many regions.) Each function returns
 plain dicts/lists; presentation lives in the tool modules.
 """
 
+import gzip
 import math
 import statistics
 import time
+import urllib.request
 from urllib.parse import quote
 
-from .http import http_get, http_post
+from .http import http_get, http_post, UA, TIMEOUT
 from .stats import (DAYS, OKX_FUNDINGS_PER_DAY, HL_FUNDINGS_PER_DAY,
                     cc_vol, parkinson_vol, log_returns)
 
@@ -82,6 +84,50 @@ def deribit_dvol(days=400, resolution="1D", currency="BTC"):
                     f"?currency={currency}&start_timestamp={start}&end_timestamp={now}"
                     f"&resolution={resolution}")["result"]["data"]
     return [(row[0], row[4] / 100.0) for row in data]   # close, % -> fraction
+
+
+def tardis_options_chain(date, currency="BTC", window_us=300_000_000, max_rows=600_000):
+    """Historical Deribit option chain from a Tardis.dev free monthly snapshot.
+
+    `date` must be the 1st of a month ('YYYY-MM-01') — the free tier. Streams the
+    gzipped options_chain CSV and keeps the first snapshot per symbol within a short
+    window, returning our standard chain dict {index, options}. Free back to 2020-03.
+    """
+    y, m, d = date.split("-")
+    url = f"https://datasets.tardis.dev/v1/deribit/options_chain/{y}/{m}/{d}/OPTIONS.csv.gz"
+    resp = urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=60)
+    gz = gzip.GzipFile(fileobj=resp)
+    gz.readline()                                   # header
+    pre = (currency + "-").encode()
+    seen, first_ts, index, n = {}, None, None, 0
+    for raw in gz:
+        n += 1
+        if n > max_rows:
+            break
+        p = raw.split(b",")
+        if len(p) < 20:
+            continue
+        ts = int(p[2])
+        if first_ts is None:
+            first_ts = ts
+        if ts > first_ts + window_us:
+            break
+        sym = p[1]
+        if not sym.startswith(pre) or sym in seen:
+            continue
+        miv = p[16]
+        if not miv or float(miv) <= 0:
+            continue
+        if index is None and p[18]:
+            index = float(p[18])
+        expiry_ms = int(p[6]) // 1000
+        seen[sym] = {"instrument": sym.decode(), "type": "C" if p[4] == b"call" else "P",
+                     "strike": float(p[5]), "expiry_ms": expiry_ms,
+                     "iv": float(miv) / 100.0, "oi": float(p[7] or 0), "volume": None,
+                     "dte": (expiry_ms - first_ts // 1000) / 86400000.0,
+                     "mark_btc": float(p[15]) if p[15] else None, "bid_btc": None, "ask_btc": None}
+    resp.close()
+    return {"index": index, "options": [o for o in seen.values() if o["dte"] > 0]}
 
 
 def yahoo_chart(symbol, rng="2y", interval="1d"):

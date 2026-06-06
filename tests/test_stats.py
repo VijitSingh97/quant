@@ -53,3 +53,29 @@ def test_parkinson_vol_positive():
     lows = [100, 101, 99, 102]
     v = stats.parkinson_vol(highs, lows, window=4)
     assert v is not None and v > 0
+
+
+def _ohlc(n=20):
+    o = [100 + 0.5 * (i % 3) for i in range(n)]
+    h = [x + 2 for x in o]
+    lo = [x - 2 for x in o]
+    c = [x + (1 if i % 2 else -1) for i, x in enumerate(o)]
+    return o, h, lo, c
+
+
+def test_garman_klass_positive_and_gated():
+    o, h, lo, c = _ohlc()
+    assert stats.garman_klass(o, h, lo, c, window=20) > 0
+    assert stats.garman_klass([100], [101], [99], [100]) is None     # <2 bars
+
+
+def test_yang_zhang_positive_and_gated():
+    o, h, lo, c = _ohlc()
+    assert stats.yang_zhang(o, h, lo, c, window=20) > 0
+    assert stats.yang_zhang([100, 100], [101, 101], [99, 99], [100, 100]) is None   # <3 bars
+
+
+def test_range_estimators_zero_on_flat_series():
+    flat = [100] * 10
+    assert stats.garman_klass(flat, flat, flat, flat, 10) == 0.0     # no range, no moves
+    assert stats.yang_zhang(flat, flat, flat, flat, 10) == 0.0
