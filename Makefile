@@ -1,11 +1,12 @@
 PY := PYTHONPATH=src python3
 
-.PHONY: help install dev test dashboard monitor carry vrp combined histskew robust condor-bt structures skew book size analyze macro backfill carry-scan histskew2 live-paper live-auto live-monitor live-web log launchd-install launchd-uninstall clean
+.PHONY: help install dev test test-integration dashboard monitor carry vrp combined histskew robust condor-bt structures skew book size analyze macro backfill carry-scan histskew2 live-paper live-auto live-monitor live-web log launchd-install launchd-uninstall clean
 
 help:
 	@echo "make install            editable install (pip install -e .)"
 	@echo "make dev                editable install + dev deps (pytest)"
-	@echo "make test               run unit tests"
+	@echo "make test               run unit tests (offline, fast)"
+	@echo "make test-integration   live-venue smoke tests (opt-in, network)"
 	@echo "make dashboard          one-shot market snapshot"
 	@echo "make monitor            cross-venue funding monitor"
 	@echo "make carry [YEARS=2]    funding-carry backtest"
@@ -39,6 +40,9 @@ dev:
 
 test:
 	$(PY) -m pytest -q
+
+test-integration:
+	$(PY) -m pytest -q -m integration -rs
 
 dashboard:
 	$(PY) -m btcvol.dashboard

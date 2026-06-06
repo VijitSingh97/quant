@@ -48,3 +48,6 @@ where = ["src"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+# Default run is OFFLINE: integration (live-venue) tests are opt-in via `-m integration`.
+addopts = "-m 'not integration'"
+markers = ["integration: hits live venues over the network (opt-in; run with make test-integration)"]

@@ -224,7 +224,8 @@ strategies can be backtested on live-captured funding/IV, not just vendor histor
 ## Testing
 
 ```bash
-make test         # or: PYTHONPATH=src python3 -m pytest -q
+make test              # offline unit suite (default, ~0.1s)
+make test-integration  # opt-in: hit live venues and assert response shapes
 ```
 
 **114 tests, fully offline** (no network — the suite runs in ~0.1s). Coverage spans the
@@ -233,8 +234,14 @@ delta, the IV-surface smile/skew fit, position sizing, the asset registry, the b
 factor math, the auto-selector hysteresis, and the audit store. The simulated execution
 path (paper-exchange fills, funding accrual, the reconcile loop's delta-neutral
 convergence, and the auto allocator's flatten) is tested via a fixed-mark exchange so it
-runs without hitting any venue. Network sources (`core/sources`, `core/http`) and pure
-display/orchestration (web, monitor, scanners) are deliberately not unit-tested.
+runs without hitting any venue.
+
+**Integration suite (opt-in, `-m integration`)** — 14 live-venue *smoke* tests that hit
+the real endpoints (Hyperliquid, Coinbase, Deribit, OKX, Yahoo, Tardis, + the read-only
+HL account client) and assert the **shape** of each response, so we catch upstream API
+drift. A network/geo failure *skips* (so transient outages and geo-blocked venues like
+Binance/Bybit don't fail the run); a wrong shape *fails*. Excluded from the default run
+so `make test` stays offline and fast.
 
 ---
 
