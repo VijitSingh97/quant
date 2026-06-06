@@ -66,7 +66,7 @@ A `Makefile` wraps the common commands: `make dashboard`, `make monitor`,
 | `basis.book` / `basis-book` | **Delta-neutral book monitor.** Reads a positions file (spot/perp/option legs), prices each leg's delta off the live chain, reports net delta (BTC + USD), and suggests the perp hedge to flatten. `--threshold`, `--strict` (exit nonzero on drift). See `examples/positions.example.json`. |
 | `basis.analyze` / `basis-analyze` | Summarizes our **own captured** `data/timeseries.csv`: VRP, funding, skew (RR25/BF25/RR10), basis/OI distributions and exploratory correlations. Degrades gracefully with little history. |
 | `basis.macro` / `basis-macro` | **Cross-asset VRP** for equities/commodities via Yahoo: implied (VIX-family `^VIX`/`^GVZ`/`^OVX`) vs realized for the S&P, gold, or oil. `--asset SPX\|GOLD\|OIL`. (Vol-selling ports; funding carry does not.) |
-| `basis.logger` / `basis-log` | Appends one compact metrics row to `data/timeseries.csv` (spot, RV, DVOL, VRP, funding, basis, OI, and the IV-surface **ATM/RR25/BF25/term-slope** — skew has no public historical source, so we capture our own). The launchd target; migrates the CSV schema in place when columns are added. |
+| `basis.logger` / `basis-log` | Appends one compact metrics row to `data/timeseries.csv` (spot, RV, DVOL, VRP, funding, basis, OI, and the IV-surface **ATM/RR25/BF25/term-slope** — skew has no public historical source, so we capture our own). Run on a schedule (Docker scheduler or launchd); migrates the CSV schema in place when columns are added. |
 
 ### Example
 
@@ -114,7 +114,9 @@ make carry-scan      # rank all perps by persistent funding     [basis-carry-sca
 
 Risk gate (USD limits + kill switch), SQLite audit store, read-only-first Hyperliquid
 client, and an auto allocator with a liquidity floor + spot-able universe + hysteresis.
-Full details, the phased path to live, and the API-key posture are in **README_live.md**.
+**How it decides what to trade** (scan → filter → hysteresis → funding-timing →
+risk-gated reconcile), the phased path to live, and the API-key posture are all in
+**[README_live.md](README_live.md#how-the-engine-decides-what-to-trade)**.
 
 **Deploy on a home server (Docker):** a self-contained, power-loss- and network-blip-
 resilient stack (scheduler + dashboard, SQLite-WAL on a named volume):
@@ -144,13 +146,14 @@ quant/
 │   ├── macro.py              cross-asset VRP (equities/commodities via Yahoo)
 │   ├── backfill.py           historical skew from Tardis free monthly snapshots
 │   ├── carryscan.py          cross-asset/venue carry scanner (persistent funding)
-│   ├── logger.py             compact CSV time-series logger (launchd target)
+│   ├── logger.py             compact CSV time-series logger (scheduled target)
 │   ├── backtests/
 │   │   ├── carry.py          funding-carry backtest
 │   │   ├── vrp.py            volatility-risk-premium backtest (naked)
 │   │   ├── structures.py     monthly condor-rule backtest (flat or --skew)
 │   │   ├── combined.py       carry + filtered-condor combined-book backtest
 │   │   ├── robustness.py     param sweep / walk-forward / cost anti-overfit checks
+│   │   ├── rotation.py       carry rotation vs fixed, net of cost (validates live-auto)
 │   │   └── histskew.py       historical-skew condor backtest on our logged data (#6)
 │   ├── core/                 shared layer (no presentation)
 │       ├── http.py           keyless REST helpers
@@ -170,17 +173,18 @@ quant/
 │       ├── selector.py       auto asset-selection (persistent funding + hysteresis)
 │       ├── engine.py         fixed-asset reconcile engine
 │       ├── auto.py           auto-rotating allocator
+│       ├── scheduler.py      supervisor loop (container) — runs cycles, self-heals
+│       ├── healthcheck.py    container HEALTHCHECK (heartbeat freshness)
 │       ├── status.py         shared status (CLI + web)
 │       ├── monitor.py · web.py · dashboard.html   CLI + web tracker
 │       └── exchanges/        base · paper (sim) · hyperliquid (read-only-first)
-├── scripts/
-│   ├── run_logger.sh         what launchd actually executes
-│   ├── install_launchd.sh    render plist + load the agent
-│   └── uninstall_launchd.sh  unload + remove
-├── deploy/
-│   └── com.vijit.basis.logger.plist   launchd template (__ROOT__ substituted on install)
-├── tests/                    pure-function unit tests (no network)
-└── data/                     snapshots, timeseries.csv, logs (git-ignored)
+├── Dockerfile                stdlib-only image (non-root, healthcheck, data volume)
+├── docker-compose.yml        home-server stack: scheduler + web, named volume
+├── .env.example              deploy config template (copy to .env)
+├── scripts/                  run_*.sh + install/uninstall_{launchd,live_paper,live_auto}.sh
+├── deploy/                   launchd plist templates (com.vijit.basis.{logger,paper,auto})
+├── tests/                    offline unit tests + opt-in integration smoke tests
+└── data/                     SQLite books, timeseries.csv, logs (git-ignored)
 ```
 
 **Design:** `core/` is the data/maths layer with no printing; the tool modules are
@@ -237,13 +241,16 @@ make test              # offline unit suite (default, ~0.1s)
 make test-integration  # opt-in: hit live venues and assert response shapes
 ```
 
-**114 tests, fully offline** (no network — the suite runs in ~0.1s). Coverage spans the
+**134 tests, fully offline** (no network — the suite runs in ~0.2s). Coverage spans the
 pure logic: vol math / Sharpe / drawdown / Pearson, Black-Scholes + greeks + strike-from-
 delta, the IV-surface smile/skew fit, position sizing, the asset registry, the backtest
-factor math, the auto-selector hysteresis, and the audit store. The simulated execution
-path (paper-exchange fills, funding accrual, the reconcile loop's delta-neutral
-convergence, and the auto allocator's flatten) is tested via a fixed-mark exchange so it
-runs without hitting any venue.
+factor math (incl. the rotation curve/alignment helpers), the auto-selector hysteresis,
+and the audit store. The simulated execution path (paper-exchange fills, funding accrual,
+the reconcile loop's delta-neutral convergence, and the auto allocator's flatten) is
+tested via a fixed-mark exchange. The **deployment/resilience layer** is covered too: the
+HTTP retry/backoff (retries transient errors, fast-fails geo-blocks), SQLite WAL mode,
+the `BASIS_DATA_DIR` override, the scheduler's per-cycle failure isolation, and the
+container healthcheck's exit codes — all without touching the network.
 
 **Integration suite (opt-in, `-m integration`)** — 14 live-venue *smoke* tests that hit
 the real endpoints (Hyperliquid, Coinbase, Deribit, OKX, Yahoo, Tardis, + the read-only

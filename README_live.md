@@ -26,6 +26,99 @@ Run `live-paper` repeatedly (or scheduled) — it converges to the delta-neutral
 (long spot / short perp), stays funding-timed (flat when funding < 0), and accrues
 simulated funding so you can watch the strategy earn.
 
+## How the engine decides what to trade
+
+**The edge.** A perpetual swap pays *funding* periodically between longs and shorts.
+When funding is positive, longs pay shorts. So if you hold the asset's **spot** (long)
+and **short an equal-sized perp**, you have **zero price exposure** (delta-neutral) but
+you **receive funding every hour**. That funding stream is the income. The job of the
+engine is to (a) find where that stream is richest *and durable*, (b) hold it neutral,
+and (c) stop when it isn't worth it — all within hard risk caps.
+
+Each cycle runs this pipeline:
+
+```
+              ┌─ 1. SCAN ─────────────────────────────────┐
+  every       │ funding for every liquid perp, summarised  │
+  cycle  ───▶ │ as PERSISTENT funding: 14d-avg APR + %hrs+ │   (a 1h spike isn't
+  (hourly)    │ (carryscan / status.opportunities)         │    harvestable; a
+              └───────────────────┬───────────────────────┘    structurally-hot
+                                  ▼                              market is)
+              ┌─ 2. FILTER (selector.select_asset) ───────┐
+              │ keep candidates where:                     │
+              │   avg APR ≥ min_funding   (5%)             │
+              │   open interest ≥ liquidity floor ($20M)   │
+              │   asset ∈ spot-able universe (BTC/ETH/     │
+              │     SOL/HYPE) — need a co-located spot leg  │
+              │ rank survivors by persistent APR           │
+              └───────────────────┬───────────────────────┘
+                                  ▼
+              ┌─ 3. HYSTERESIS (don't churn) ─────────────┐
+              │ no position  → deploy the best             │
+              │ holding X    → rotate ONLY if a candidate  │
+              │   beats X by switch_margin (5% APR), or X  │
+              │   stops qualifying / drops below exit      │
+              │ else         → hold X                      │
+              └───────────────────┬───────────────────────┘
+                                  ▼ chosen asset (or cash)
+              ┌─ 4. FUNDING-TIMING (allocator.carry_target)┐
+              │ funding > 0 → target long spot + short perp │
+              │   sized at deploy_fraction (85%) of equity  │
+              │ funding ≤ 0 → target FLAT (cash): never pay │
+              │   funding; sit out negative regimes         │
+              └───────────────────┬───────────────────────┘
+                                  ▼ target legs
+              ┌─ 5. RECONCILE + RISK GATE (engine/auto) ──┐
+              │ diff target vs current → orders, each      │
+              │ CLAMPED to max_order ($3k) so it converges │
+              │ over cycles; every order must pass         │
+              │ risk.check_order (caps + kill switch);     │
+              │ then fill (paper sim / live) → audit DB    │
+              └────────────────────────────────────────────┘
+```
+
+**Why each step exists**
+- **Persistence, not spot rate** — funding is noisy hour-to-hour. Ranking on a 14-day
+  average (plus % of hours positive) finds markets that are *structurally* hard to short
+  (so longs persistently overpay), not a one-hour blip you'd miss anyway.
+- **Spot-able universe** — to be delta-neutral you must actually hold spot against the
+  short perp. XMR can print +32% but there's no co-located spot to pair it with, so it's
+  shown as *advisory* and never deployed. The default deployable set is BTC/ETH/SOL/HYPE
+  (spot **and** perp on Hyperliquid); `BASIS_AUTO_SPOT_UNIVERSE=ANY` opts into others you
+  can source spot for.
+- **Hysteresis** — a small, persistent edge isn't worth paying 4 legs of fees to chase.
+  Requiring a candidate to beat the held asset by a margin keeps turnover low (the
+  backtest rotated 7× in 400 days). See `make rotation` for the evidence it pays.
+- **Funding-timing** — the carry only earns when funding is positive. When it flips
+  negative the target goes to cash, so you're either earning or flat, never bleeding.
+- **Clamp + risk gate** — orders are capped per cycle (so a big rebalance walks in over a
+  few cycles instead of one fat fill) and every single order is checked against the USD
+  risk limits and the kill switch before it can touch the book.
+
+**Two ways to run it**
+| Mode | Command | Asset choice |
+|---|---|---|
+| **Fixed** | `make live-paper` (`BASIS_SYMBOL=ETH …`) | you pick; engine holds it, funding-timed |
+| **Auto** | `make live-auto` | the selector picks + rotates with hysteresis |
+
+**The parameters that drive the decision** (env-overridable, `BASIS_*`):
+
+| Parameter | Env | Default | What it controls |
+|---|---|---|---|
+| Min funding | `BASIS_AUTO_MIN_FUNDING` | 0.05 | floor APR to deploy at all |
+| Liquidity floor | `BASIS_AUTO_OI_FLOOR_USD` | 20,000,000 | skip thin markets |
+| Spot universe | `BASIS_AUTO_SPOT_UNIVERSE` | BTC,ETH,SOL,HYPE | deployable set (`ANY` = all) |
+| Switch margin | `BASIS_AUTO_SWITCH_MARGIN` | 0.05 | hysteresis: edge needed to rotate |
+| Exit funding | `BASIS_AUTO_EXIT_FUNDING` | 0.0 | drop the held asset below this avg |
+| Deploy fraction | `BASIS_DEPLOY_FRACTION` | 0.85 | how much equity to put to work |
+| Funding-timed | `BASIS_FUNDING_TIMED` | 1 | go flat when funding ≤ 0 |
+
+**Worked example (live, right now).** BTC perp funding is *negative* (≈ −2.5% APR), so a
+fixed-BTC carry sits **FLAT** (funding-timed). The auto allocator scans, sees **HYPE** at
+≈ +14% persistent (spot-able, ~$1.2B OI) as the best qualifying market, and deploys it
+delta-neutral at 0.85× — while reporting that XMR (≈ +32%) is hotter but **excluded** for
+lack of co-located spot. Hysteresis then *holds* HYPE until something beats it by 5% APR.
+
 ## Web dashboard (`make live-web` → http://localhost:8787)
 
 A dependency-free single-page dashboard (stdlib `http.server`). Up top, a **position
@@ -166,6 +259,8 @@ engine.py        reconcile target vs actual -> risk-gated orders -> (paper) fill
 status.py        shared status assembler (one source of truth for CLI + web)
 selector.py      auto asset-selection (persistent funding + hysteresis)
 auto.py          auto-rotating allocator (own book)
+scheduler.py     supervisor loop (container): run cycles, isolate failures, heartbeat
+healthcheck.py   container HEALTHCHECK — heartbeat freshness
 monitor.py · web.py · dashboard.html   CLI + web tracker
 exchanges/
   base.py        ExchangeClient interface + Order
